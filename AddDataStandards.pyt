@@ -228,7 +228,13 @@ class AddDataStandardsToExistingFC(object):
         template_xml = template_md.xml
         start_tag = '<attr xmlns="">'
         end_tag = '</detailed>'
-        template_txt = template_xml.split(start_tag, 1)[1].split(end_tag)[0]
+        try: template_txt = template_xml.split(start_tag, 1)[1].split(end_tag)[0]
+        except:
+            msg(' --- ERROR --- ')
+            msg(' metadata has likely not been synced ')
+            msg(' open the featureclass metadata, and in the metadata tab click the sync button')
+            msg(' then try running this tool again')
+            raise SystemExit
 
         # insert template txt into original metadata
         fc_xml = fc_md.xml
