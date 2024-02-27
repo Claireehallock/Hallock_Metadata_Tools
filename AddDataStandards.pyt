@@ -318,8 +318,14 @@ class JustAddMetadata(object):
         fc_xml_list = fc_xml.split(end_tag)
 
         new_xml = start_tag.join([fc_xml_list[0], template_txt])
-        new_xml = end_tag.join([new_xml, fc_xml_list[1]])
-
+        try: new_xml = end_tag.join([new_xml, fc_xml_list[1]])
+        except:
+            msg(' --- ERROR --- ')
+            msg(' metadata has likely not been synced ')
+            msg(' open the featureclass metadata, and in the metadata tab click the sync button')
+            msg(' then try running this tool again')
+            raise SystemExit
+            
          # save xml
         fc_md.xml = new_xml
 
