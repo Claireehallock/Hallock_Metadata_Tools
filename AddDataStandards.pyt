@@ -153,7 +153,7 @@ class AddDataStandardsToExistingFC(object):
         for fld in arcpy.ListFields(template):
 
             # don't add objectid or shape fields
-            if fld.name in ['OBJECTID', 'Shape']: continue
+            if fld.name.upper() in ['OBJECTID', 'SHAPE']: continue
 
             msg(f' - {fld.name}')
 
