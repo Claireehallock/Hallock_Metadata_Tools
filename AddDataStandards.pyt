@@ -35,16 +35,12 @@ class AddDataStandardsToExistingFC(object):
                 parameterType = "Required",
                 direction = "Input")
 
-        fc.value = r'C:\Users\DShreve\Downloads\test_20230314_1_1.gdb\YOSE_Sign_Inventory'
-
         template = arcpy.Parameter(
                 displayName = "Source Feature Class",
                 name = "template",
                 datatype = "DEFeatureClass",
                 parameterType = "Required",
                 direction = "Input")
-
-        template.value = r'\\inpyosegis\Yosemite_EGIS\Templates\Geodatabase_Templates\NPS_CORE_20160810\NPS_CORE_20160810.gdb\CORE_EXTENDED_pt'
 
         default_unit_code = arcpy.Parameter(
                 displayName = "Default Unit Code (Optional)",
