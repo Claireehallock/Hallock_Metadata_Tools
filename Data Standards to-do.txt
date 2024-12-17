@@ -1,0 +1,10 @@
+- fix just add metadata
+    - flag if field doesnt exist
+- figure out alter length
+- add domains to md
+- quality check:
+    - duplicates, check if desc is populated, check for domains in fields
+- (potential): Check metadata for things like "contacts", "constriants", etc
+
+2 separate tools for data standards and md quality
+domain range vs coded values
