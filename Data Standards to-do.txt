@@ -7,4 +7,12 @@
 - (potential): Check metadata for things like "contacts", "constriants", etc
 
 2 separate tools for data standards and md quality
+    params: Check for dupe fields and give options to delete/rename fields within metadata
+            Fill in descriptions whatnot
 domain range vs coded values
+
+get rid of duplicates in the quick fix tool
+Also add description adding part to quick fix
+Old tools dont automatucally separate domain list values
+fix range domains in rest of tools
+Check domains better within quick fix
