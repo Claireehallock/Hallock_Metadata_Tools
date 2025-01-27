@@ -216,6 +216,15 @@ def AddDomainValues(value, domainCodedValues, edomvdValue = None, edomvdsValue =
     edom.append(edomvds)
     return edom
 
+def RemoveOldMDDomain(attr):
+    """Given an attr Element of an Element Tree, remove all domain values."""
+    if type(attr) == ET.Element and attr.tag == "attr":
+        for attrdomvOld in attr.findall("attrdomv"):
+            if attrdomvOld.find("edom") is not None or attrdomvOld.find("udom") is not None or attrdomvOld.find("rdom") is not None:
+                attr.remove(attrdomvOld)
+    else:
+        error("Tried to remove domain from non-attr value")
+
 def AddDomainsToMD(fc, valueDescriptions = None):
     """Add All Domains to metadata if they don't exist"""
     #Get basic info about fields
@@ -236,8 +245,14 @@ def AddDomainsToMD(fc, valueDescriptions = None):
             fieldName = attr.findtext("attrlabl")
             if fieldName.upper() in upperDomainFields: #Find fields in metadata that have domains
                 domain = relevantDomains[relevantDomainNamesUpper.index(upperDomainNames[upperDomainFields.index(fieldName.upper())])]
-                domainCodedValues = domain.codedValues
-                if domainCodedValues and attr.find("attrdomv") is not None:
+
+                domainCodedValues = None
+                domainRange = None
+                if domain.domainType == "CodedValue":
+                    domainCodedValues = domain.codedValues
+                else:
+                    domainRange = domain.range
+                if attr.find("attrdomv") is not None:
                     msg(fieldName)
                     
                     #Add the basic listing
@@ -280,9 +295,7 @@ def AddDomainsToMD(fc, valueDescriptions = None):
                                 warn("Extra metadata domain Values: " + str(valuesInMD)+ " in field " + str(fieldName))
                                 
                             #Delete other forms of domain metadata before adding new one
-                            for attrdomvOld in attr.findall("attrdomv"):
-                                if attrdomvOld.find("edom") is not None or attrdomvOld.find("udom") is not None:
-                                    attr.remove(attrdomvOld)
+                            RemoveOldMDDomain(attr)
                             attr.append(attrdomv)
                         
                         #If using list of keys
@@ -292,9 +305,7 @@ def AddDomainsToMD(fc, valueDescriptions = None):
                             udom.text = ";\n".join(domainCodedValues)
                             attrdomv.append(udom)
                             #Delete other forms of domain metadata before adding new one
-                            for attrdomvOld in attr.findall("attrdomv"):
-                                if attrdomvOld.find("edom") is not None or attrdomvOld.find("udom") is not None:
-                                    attr.remove(attrdomvOld)
+                            RemoveOldMDDomain(attr)
                             attr.append(attrdomv)
 
                         #If using list of keys/values
@@ -305,9 +316,23 @@ def AddDomainsToMD(fc, valueDescriptions = None):
                             udom.text = ";\n".join(domainValuePairs)
                             attrdomv.append(udom)
                             #Delete other forms of domain metadata before adding new one
-                            for attrdomvOld in attr.findall("attrdomv"):
-                                if attrdomvOld.find("edom") is not None or attrdomvOld.find("udom") is not None:
-                                    attr.remove(attrdomvOld)
+                            RemoveOldMDDomain(attr)
+                            attr.append(attrdomv)
+                        
+                        #If is range domain instead of coded values
+                        elif valueDescriptions[fieldName] == "Range":
+                            msg(str(fieldName) + " (Range)")
+                            attrdomv = ET.Element("attrdomv")
+                            rdom = ET.Element("rdom")
+                            rdommin = ET.Element("rdommin")
+                            rdommin.text = str(domainRange[0])
+                            rdommax = ET.Element("rdommax")
+                            rdommax.text = str(domainRange[1])
+                            rdom.append(rdommin)
+                            rdom.append(rdommax)
+                            attrdomv.append(rdom)
+                            #Delete other forms of domain metadata before adding new one
+                            RemoveOldMDDomain(attr)
                             attr.append(attrdomv)
                 else:
                     msg(fieldName)
@@ -1012,15 +1037,6 @@ class FixMetadataDomains(object):
                 datatype = "GPTableView",
                 parameterType = "Required",
                 direction = "Input")
-        
-        fieldOptions = arcpy.Parameter(
-                displayName = "Metadata Field Options",
-                name = "FieldOptions",
-                datatype = "GPString",
-                parameterType = "Optional",
-                direction = "Input",
-                multiValue=True
-        )
 
         domainOptions = arcpy.Parameter(
                 displayName = "Metadata Domain Options",
@@ -1031,22 +1047,22 @@ class FixMetadataDomains(object):
                 multiValue=True
         )
 
-        domainValues = arcpy.Parameter(
-                displayName = "Metadata Domain Value Options",
-                name = "DomainValueOptions",
+        rangeDomainOptions = arcpy.Parameter(
+                displayName = "Metadata Range Domains",
+                name = "RangeDomainOptions",
                 datatype = "GPString",
                 parameterType = "Optional",
                 direction = "Input",
                 multiValue=True
         )
-        fieldOptions.columns = [["GPString", "b", "READONLY"], ["GPString", "New Description value"]]
-        fieldOptions.enabled = False
         domainOptions.columns = [["GPString", "Field", "READONLY"], ["GPString", "Domain Name", "READONLY"], ["GPString", "Sample Domain Values", "READONLY"], ["Boolean", "Use separate values"], ["Boolean", "Use list of keys"], ["Boolean", "Use list of keys + values"]]
         domainOptions.enabled = False
-        domainValues.columns = [["GPString", "Domain that needs description", "READONLY"], ["GPString", "New Description value"]]
-        domainValues.enabled = False
+        rangeDomainOptions.columns = [["GPString", "Field", "READONLY"], ["GPString", "Domain Name", "READONLY"], ["GPString", "Range", "READONLY"]] #["GPString", "Min Value"], ["GPString", "Max Value"]]
+        rangeDomainOptions.enabled = False
+        # domainValues.columns = [["GPString", "Domain that needs description", "READONLY"], ["GPString", "New Description value"]]
+        # domainValues.enabled = False
         
-        params = [fc, fieldOptions, domainOptions, domainValues, arcpy.Parameter(
+        params = [fc, domainOptions, rangeDomainOptions, arcpy.Parameter(
                 displayName = "Test String",
                 name = "String",
                 datatype = "GPString",
@@ -1081,7 +1097,6 @@ class FixMetadataDomains(object):
 
             if not parameters[0].hasBeenValidated:
                 parameters[1].enabled = True
-                parameters[2].enabled = True
 
                 #Create var to store info  to be used in param updating
                 existingMetadataFieldInfo = {field.name.upper():{"Description":"", "Source":"", "Domain":None} for field in fields}
@@ -1099,19 +1114,12 @@ class FixMetadataDomains(object):
                             for attr in fieldMetadataList:
                                 fieldName = attr.findtext("attrlabl")
                                 if fieldName:
-                                    #Add Description if exists
-                                    fieldDescription = attr.find("attrdef")
-                                    if fieldDescription is not None:
-                                        existingMetadataFieldInfo[fieldName.upper()]["Description"] = fieldDescription.text
-                                    #Add Source if exists
-                                    fieldSource = attr.find("attrdefs")
-                                    if fieldSource is not None:
-                                        existingMetadataFieldInfo[fieldName.upper()]["Source"] = fieldSource.text
                                     #Check if there is a domain for the field
                                     if fieldName.upper() in upperDomainFields:
                                         attrdomvs = attr.findall("attrdomv")
                                         if attrdomvs:
-                                            domainInfo = {"Name": "", "Source": "", "ValueList": "", "Values": []}
+                                            #Get the info about hte domain within the metadata
+                                            domainInfo = {"Name": "", "Source": "", "ValueList": "", "Values": [], "Range": (None, None)}
                                             for attrdomv in attrdomvs:
                                                 if attrdomv.find("codesetd") is not None: #attrdomv with Domain description/Source
                                                     codesetd = attrdomv.find("codesetd")
@@ -1138,107 +1146,120 @@ class FixMetadataDomains(object):
                                                 elif attrdomv.find("udom") is not None: #attrdomv with List of values
                                                     udom = attrdomv.find("udom")
                                                     domainInfo["ValueList"] = udom.text
+                                                elif attrdomv.find("rdom") is not None: #attrdomv with range domain
+                                                    rdom = attrdomv.find("rdom")
+                                                    rdomin = rdom.find("rdomin")
+                                                    rdomax = rdom.find("rdomax")
+                                                    domainInfo["Range"] = (rdomin, rdomax)
                                                 else:
                                                     pass#?
                                             existingMetadataFieldInfo[fieldName.upper()]["Domain"] = domainInfo
                 
-                existingFieldDomainInfo = {field.name.upper():relevantDomains[relevantDomainNamesUpper.index(upperDomainNames[field.name.upper()])] for field in fields if field.domain}
+                realFieldDomainInfo = {field.name.upper():relevantDomains[relevantDomainNamesUpper.index(upperDomainNames[field.name.upper()])] for field in fields if field.domain}
                 
-                fieldOptions = []
+                #Set up parameters
                 domainOptions = []
+                rangeDomainOptions = []
                 testStr = ""
                 for field in fields:
+                    #Get real field info
                     uName = field.name.upper()
                     alias = field.aliasName
                     fieldDesignation = field.name
                     if alias != field.name:
                         fieldDesignation = field.name + " (" + alias + ")"
                     fieldMDInfo = existingMetadataFieldInfo[uName]
-                    fieldOptions.append([fieldDesignation, fieldMDInfo["Description"]])
-                    if uName in existingFieldDomainInfo.keys():
-                        domainInfo = existingFieldDomainInfo[uName]
+                    #Deal with real domain info
+                    if uName in realFieldDomainInfo.keys():
+                        realDomainInfo = realFieldDomainInfo[uName]
                         domainMDInfo = None
                         if fieldMDInfo:
                             domainMDInfo = fieldMDInfo["Domain"]
-                            
-                        if domainInfo.domainType == "CodedValue": #Coded Values Domain
-                            key1 = list(domainInfo.codedValues.keys())[0] #Have only show separate key/value if they are differeny=================================
-                            key2 = list(domainInfo.codedValues.keys())[1]
+
+                        #Get the domain name
+                        domainNameStr = ""
+                        if domainMDInfo and realDomainInfo.name != domainMDInfo["Name"]:
+                            domainNameStr = str(domainMDInfo["Name"])+" -> "+str(realDomainInfo.name)
+                        else:
+                            domainNameStr = str(realDomainInfo.name)
+                        
+                        #Get sample Values
+                        if realDomainInfo.domainType == "CodedValue": #Get values of Coded Values Domain
+                            key1 = list(realDomainInfo.codedValues.keys())[0] 
+                            key2 = list(realDomainInfo.codedValues.keys())[1]
+
+                            #Get sample values of the domain
                             sampleValueStr = ""
-                            if key1 != domainInfo.codedValues[key1]:
-                                sampleValueStr+= "("+str(key1) +" | "+str(domainInfo.codedValues[key1])+")"
+                            if key1 != realDomainInfo.codedValues[key1]:
+                                sampleValueStr += "("+str(key1) +" | "+str(realDomainInfo.codedValues[key1])+")"
                             else:
                                 sampleValueStr += str(key1)
-                            sampleValueStr+= "; "
-                            if key2 != domainInfo.codedValues[key2]:
-                                sampleValueStr+=  "(" + str(key2) + " | "+str(domainInfo.codedValues[key2])+")"
+                            sampleValueStr += "; "
+                            if key2 != realDomainInfo.codedValues[key2]:
+                                sampleValueStr +=  "(" + str(key2) + " | "+str(realDomainInfo.codedValues[key2])+")"
                             else:
                                 sampleValueStr += str(key2)
                             
-                            domainNameStr = ""
-                            if domainMDInfo and domainInfo.name != domainMDInfo["Name"]:
-                                domainNameStr = str(domainMDInfo["Name"])+" -> "+str(domainInfo.name)
-                            else:
-                                domainNameStr = str(domainInfo.name)
-                            
                             domainOptions.append([fieldDesignation, domainNameStr, sampleValueStr, False, False, False])
-                        else: #Range Domain
-                            pass 
+                        else: #Get range of Range Domain
+                            range = realDomainInfo.range
+                            rangeDomainOptions.append([fieldDesignation, domainNameStr, str(range)])
 
-                        if uName in list(existingMetadataFieldInfo.keys()): #Check if domain is in metadata
+                        #Set the checkmark value in the parameter
+                        if uName in list(existingMetadataFieldInfo.keys()): 
                             if domainMDInfo:
-                                # testStr += "(" +str(uName) + " " +str(domainMDInfo["Values"]) +")"
-                                if domainMDInfo["Values"]: #Exists a separated values list
-                                    domainOptions[-1][3] = True #Set "Use separate values" to true
-                                elif domainMDInfo["ValueList"]: #Exists a value list
-                                    valueList = domainMDInfo["ValueList"]
-                                    if domainInfo.domainType == "CodedValue": #Coded Values Domain
+                                if realDomainInfo.domainType == "CodedValue": #Coded Values Domain
+                                    if domainMDInfo["Values"]: #Exists a separated values list
+                                        domainOptions[-1][3] = True #Set "Use separate values" to true
+                                    elif domainMDInfo["ValueList"]: #Exists a value list
+                                        valueList = domainMDInfo["ValueList"]
+                                    
                                         firstValueInList = valueList.split(";")[0]
-                                        if firstValueInList in list(domainInfo.codedValues.keys()) or firstValueInList.split(" (default)")[0] in list(domainInfo.codedValues.keys()):
+                                        if firstValueInList in list(realDomainInfo.codedValues.keys()) or firstValueInList.split(" (default)")[0] in list(realDomainInfo.codedValues.keys()):
                                             domainOptions[-1][4] = True
-                                        elif firstValueInList.split(" | ")[0] in list(domainInfo.codedValues.keys()):
+                                        elif firstValueInList.split(" | ")[0] in list(realDomainInfo.codedValues.keys()):
                                             domainOptions[-1][5] = True
-                                    else: #Range Domain
-                                        pass 
-                                else: #no further info
-                                    pass
-                parameters[1].value = fieldOptions
-                parameters[2].value = domainOptions
-                # parameters[-1].value = str(existingMetadataFieldInfo)
-                                ### domain = relevantDomains[relevantDomainNamesUpper.index(upperDomainNames[upperDomainFields.index(fieldName.upper())])]
-                                # domainCodedValues = domain.codedValues
-                                # if domainCodedValues:# and attr.find("attrdomv") is not None:
-                                #     for value in domainCodedValues.keys():
-                                #         pass
-                                #         paramStr = str(fieldAliases[fieldName.upper()])+": "
-                                #         if value != domainCodedValues[value]:
-                                #             paramStr += str(value) +" ("+str(domainCodedValues[value])+")"
-                                #         else:
-                                #             paramStr += str(value)
-                                #         paramInfoList.append([paramStr, ""])
-                parameters[-1]= "invalidated"
+                                    elif domainMDInfo["Range"] != (None, None): #in the metadata there is a range from some reason?
+                                        pass
+                                else: #Range Domain (no checkmarks)
+                                    if domainMDInfo["Range"]:
+                                        pass
+                                    elif domainMDInfo["Values"]:
+                                        pass
+                                    elif domainMDInfo["ValueList"]:
+                                        pass
+                #Show parameters if there are values, otherwise hide
+                if domainOptions:
+                    parameters[1].value = domainOptions
+                    parameters[1].enabled = True
+                else:
+                    parameters[1].enabled = False
+                if rangeDomainOptions:
+                    parameters[2].value = rangeDomainOptions
+                    parameters[2].enabled = True
+                else:
+                    parameters[2].enabled = False
+                parameters[-1].value = "invalidated"
             else:
-                parameters[-1]= "validated"
+                parameters[-1].value = "validated"
             #Set up domainValueOptions param
-            parameters[3].enabled = False
-            domainValueOptions = []
-            testStr = ""
-            if parameters[2].value:
-                for fieldParam in parameters[2].value:
-                    if fieldParam[3]:
-                        domainName = fieldParam[1]
-                        if " -> " in domainName:
-                            domainName = domainName.split(" -> ")[1]
-                        relevantDomains[relevantDomainNamesUpper.index(domainName)]
-                        testStr += str(domainName) + " | "
-                # parameters[-1].value = testStr
-                parameters[3].value = domainValueOptions
-            else:
-                parameters[2].enabled = False
+            # parameters[2].enabled = False
+            # domainValueOptions = []
+            # testStr = ""
+            # if parameters[1].value:
+            #     for fieldParam in parameters[1].value:
+            #         if fieldParam[3]:
+            #             domainName = fieldParam[1]
+            #             if " -> " in domainName:
+            #                 domainName = domainName.split(" -> ")[1]
+            #             relevantDomains[relevantDomainNamesUpper.index(domainName)]
+            #             testStr += str(domainName) + " | "
+            #     parameters[2].value = domainValueOptions
+            # else:
+            #     parameters[1].enabled = False
         else:
             parameters[1].enabled = False
             parameters[2].enabled = False
-            parameters[3].enabled = False
         return
 
     def updateMessages(self, parameters):
@@ -1251,8 +1272,8 @@ class FixMetadataDomains(object):
         """The source code of the tool."""
         fcBase = parameters[0].valueAsText
         fc = arcpy.da.Describe(fcBase)['catalogPath']
-        MDFieldDescriptions = parameters[1].value
-        MDDomianOptions = parameters[2].value
+        MDDomainOptions = parameters[1].value
+        MDRangeDomainOptions = parameters[2].value
 
         
 
@@ -1263,9 +1284,10 @@ class FixMetadataDomains(object):
 
         msg('... ensuring domains were added to metadata...')
 
-        if MDDomianOptions:
-            valueDescriptions = {}
-            for domainOptions in MDDomianOptions:
+        valueDescriptions = {}
+
+        if MDDomainOptions:
+            for domainOptions in MDDomainOptions:
                 fieldName = domainOptions[0].split(" ")[0]
                 if domainOptions[3]:
                     valueDescriptions[fieldName] = "Use Separate Values"
@@ -1275,7 +1297,15 @@ class FixMetadataDomains(object):
                     valueDescriptions[fieldName] = "Use List of Keys/Values"
 
             msg(valueDescriptions)
+        
+        if MDRangeDomainOptions:
+            for rangeDomainOption in MDRangeDomainOptions:
+                fieldName = rangeDomainOption[0].split(" ")[0]
+                valueDescriptions[fieldName] = "Range"
+        msg(valueDescriptions)
+        if valueDescriptions:
             AddDomainsToMD(fc, valueDescriptions)
+
 
         msg('... Fixing field metadata formatting...')
         FixFieldMDCapitalization(fc)
@@ -1311,31 +1341,21 @@ class FixFieldMetadata(object):
                 multiValue=True
         )
 
-        domainOptions = arcpy.Parameter(
-                displayName = "Metadata Domain Options",
-                name = "DomainOptions",
-                datatype = "GPString",
-                parameterType = "Optional",
-                direction = "Input",
-                multiValue=True
-        )
-
-        domainValues = arcpy.Parameter(
-                displayName = "Metadata Domain Value Options",
-                name = "DomainValueOptions",
-                datatype = "GPString",
-                parameterType = "Optional",
-                direction = "Input",
-                multiValue=True
-        )
-        fieldOptions.columns = [["GPString", "b", "READONLY"], ["GPString", "New Description value"]]
+        fieldOptions.columns = [["GPString", "Field Name", "READONLY"], ["GPString", "New Description value"]]
         fieldOptions.enabled = False
-        domainOptions.columns = [["GPString", "Field", "READONLY"], ["GPString", "Domain Name", "READONLY"], ["GPString", "Sample Domain Values", "READONLY"], ["Boolean", "Use separate values"], ["Boolean", "Use list of keys"], ["Boolean", "Use list of keys + values"]]
-        domainOptions.enabled = False
-        domainValues.columns = [["GPString", "Domain that needs description", "READONLY"], ["GPString", "New Description value"]]
-        domainValues.enabled = False
+
+        missingFields = arcpy.Parameter(
+                displayName = "Missing Fields",
+                name = "Missing Fields",
+                datatype = "GPString",
+                parameterType = "Optional",
+                direction = "Input",
+                multiValue=True
+        )
+        missingFields.columns = [["GPString", "Field Name", "READONLY"]]
+        missingFields.enabled = False
         
-        params = [fc, fieldOptions, domainOptions, domainValues, arcpy.Parameter(
+        params = [fc, fieldOptions, missingFields, arcpy.Parameter(
                 displayName = "Test String",
                 name = "String",
                 datatype = "GPString",
@@ -1359,21 +1379,12 @@ class FixFieldMetadata(object):
             fc = arcpy.da.Describe(fcBase)['catalogPath']
 
             fields = [field for field in arcpy.ListFields(fc)]
-            # domainFields = [field.name for field in fields if field.domain]
-            upperDomainFields = [field.name.upper() for field in fields if field.domain]
-            # fieldAliases = {field.name.upper():field.aliasName for field in fields if field.domain}
-            upperDomainNames = {field.name.upper():field.domain.upper() for field in fields if field.domain}
-            
-            allDomains = arcpy.da.ListDomains(getWorkspace(fc))
-            relevantDomains = [domain for domain in allDomains if domain.name.upper() in upperDomainNames.values()]
-            relevantDomainNamesUpper = [domain.name.upper() for domain in relevantDomains]
 
             if not parameters[0].hasBeenValidated:
                 parameters[1].enabled = True
-                parameters[2].enabled = True
 
                 #Create var to store info  to be used in param updating
-                existingMetadataFieldInfo = {field.name.upper():{"Description":"", "Source":"", "Domain":None} for field in fields}
+                existingMetadataFieldInfo = {}
 
                 #Get existing infomation within metadata
                 fc_md = arcpy.metadata.Metadata(fc)
@@ -1387,6 +1398,7 @@ class FixFieldMetadata(object):
                         if fieldMetadataList:
                             for attr in fieldMetadataList:
                                 fieldName = attr.findtext("attrlabl")
+                                existingMetadataFieldInfo[fieldName.upper()] = {"Description":"", "Source":"", "Domain":None}
                                 if fieldName:
                                     #Add Description if exists
                                     fieldDescription = attr.find("attrdef")
@@ -1396,138 +1408,39 @@ class FixFieldMetadata(object):
                                     fieldSource = attr.find("attrdefs")
                                     if fieldSource is not None:
                                         existingMetadataFieldInfo[fieldName.upper()]["Source"] = fieldSource.text
-                                    #Check if there is a domain for the field
-                                    if fieldName.upper() in upperDomainFields:
-                                        attrdomvs = attr.findall("attrdomv")
-                                        if attrdomvs:
-                                            domainInfo = {"Name": "", "Source": "", "ValueList": "", "Values": []}
-                                            for attrdomv in attrdomvs:
-                                                if attrdomv.find("codesetd") is not None: #attrdomv with Domain description/Source
-                                                    codesetd = attrdomv.find("codesetd")
-
-                                                    codesetn = codesetd.find("codesetn")
-                                                    if codesetn is not None:
-                                                        domainInfo["Name"] = codesetn.text
-                                                    codesets = codesetd.find("codesets")
-                                                    if codesets is not None:
-                                                        domainInfo["Source"] = codesets.text
-                                                elif attrdomv.find("edom") is not None: #attrdomv with Multiple unique values
-                                                    edoms = attrdomv.findall("edom")
-                                                    for edom in edoms:
-                                                        domainValueInfo = {"Value":"", "Value Description":"", "Value Source":""}
-
-                                                        if edom.find("edomv") is not None:
-                                                            domainValueInfo["Value"] = edom.find("edomv").text
-                                                        if edom.find("edomvd") is not None:
-                                                            domainValueInfo["Value Description"] = edom.find("edomvd").text
-                                                        if edom.find("edomvds") is not None:
-                                                            domainValueInfo["Value Source"] = edom.find("edomvds").text
-
-                                                        domainInfo["Values"].append(domainValueInfo)
-                                                elif attrdomv.find("udom") is not None: #attrdomv with List of values
-                                                    udom = attrdomv.find("udom")
-                                                    domainInfo["ValueList"] = udom.text
-                                                else:
-                                                    pass#?
-                                            existingMetadataFieldInfo[fieldName.upper()]["Domain"] = domainInfo
                 
-                existingFieldDomainInfo = {field.name.upper():relevantDomains[relevantDomainNamesUpper.index(upperDomainNames[field.name.upper()])] for field in fields if field.domain}
-                
+
                 fieldOptions = []
-                domainOptions = []
-                testStr = ""
+                missingFields = []
                 for field in fields:
                     uName = field.name.upper()
                     alias = field.aliasName
                     fieldDesignation = field.name
                     if alias != field.name:
                         fieldDesignation = field.name + " (" + alias + ")"
-                    fieldMDInfo = existingMetadataFieldInfo[uName]
-                    fieldOptions.append([fieldDesignation, fieldMDInfo["Description"]])
-                    if uName in existingFieldDomainInfo.keys():
-                        domainInfo = existingFieldDomainInfo[uName]
-                        domainMDInfo = None
-                        if fieldMDInfo:
-                            domainMDInfo = fieldMDInfo["Domain"]
-                            
-                        if domainInfo.domainType == "CodedValue": #Coded Values Domain
-                            key1 = list(domainInfo.codedValues.keys())[0] #Have only show separate key/value if they are differeny=================================
-                            key2 = list(domainInfo.codedValues.keys())[1]
-                            sampleValueStr = ""
-                            if key1 != domainInfo.codedValues[key1]:
-                                sampleValueStr+= "("+str(key1) +" | "+str(domainInfo.codedValues[key1])+")"
-                            else:
-                                sampleValueStr += str(key1)
-                            sampleValueStr+= "; "
-                            if key2 != domainInfo.codedValues[key2]:
-                                sampleValueStr+=  "(" + str(key2) + " | "+str(domainInfo.codedValues[key2])+")"
-                            else:
-                                sampleValueStr += str(key2)
-                            
-                            domainNameStr = ""
-                            if domainMDInfo and domainInfo.name != domainMDInfo["Name"]:
-                                domainNameStr = str(domainMDInfo["Name"])+" -> "+str(domainInfo.name)
-                            else:
-                                domainNameStr = str(domainInfo.name)
-                            
-                            domainOptions.append([fieldDesignation, domainNameStr, sampleValueStr, False, False, False])
-                        else: #Range Domain
-                            pass 
+                    if uName in existingMetadataFieldInfo.keys():
+                        fieldMDInfo = existingMetadataFieldInfo[uName]
+                        fieldOptions.append([fieldDesignation, fieldMDInfo["Description"]])
+                    else:
+                        missingFields.append([fieldDesignation])
 
-                        if uName in list(existingMetadataFieldInfo.keys()): #Check if domain is in metadata
-                            if domainMDInfo:
-                                # testStr += "(" +str(uName) + " " +str(domainMDInfo["Values"]) +")"
-                                if domainMDInfo["Values"]: #Exists a separated values list
-                                    domainOptions[-1][3] = True #Set "Use separate values" to true
-                                elif domainMDInfo["ValueList"]: #Exists a value list
-                                    valueList = domainMDInfo["ValueList"]
-                                    if domainInfo.domainType == "CodedValue": #Coded Values Domain
-                                        firstValueInList = valueList.split(";")[0]
-                                        if firstValueInList in list(domainInfo.codedValues.keys()) or firstValueInList.split(" (default)")[0] in list(domainInfo.codedValues.keys()):
-                                            domainOptions[-1][4] = True
-                                        elif firstValueInList.split(" | ")[0] in list(domainInfo.codedValues.keys()):
-                                            domainOptions[-1][5] = True
-                                    else: #Range Domain
-                                        pass 
-                                else: #no further info
-                                    pass
-                parameters[1].value = fieldOptions
-                parameters[2].value = domainOptions
-                # parameters[-1].value = str(existingMetadataFieldInfo)
-                                ### domain = relevantDomains[relevantDomainNamesUpper.index(upperDomainNames[upperDomainFields.index(fieldName.upper())])]
-                                # domainCodedValues = domain.codedValues
-                                # if domainCodedValues:# and attr.find("attrdomv") is not None:
-                                #     for value in domainCodedValues.keys():
-                                #         pass
-                                #         paramStr = str(fieldAliases[fieldName.upper()])+": "
-                                #         if value != domainCodedValues[value]:
-                                #             paramStr += str(value) +" ("+str(domainCodedValues[value])+")"
-                                #         else:
-                                #             paramStr += str(value)
-                                #         paramInfoList.append([paramStr, ""])
-                parameters[-1]= "invalidated"
+                if fieldOptions:
+                    parameters[1].value = fieldOptions
+                    parameters[1].enabled = True
+                else:
+                    parameters[1].enabled = False
+
+                if missingFields:
+                    parameters[2].value = missingFields
+                    parameters[2].enabled = True
+                else:
+                    parameters[2].enabled = False
+
+                parameters[-1].value = "invalidated"
             else:
-                parameters[-1]= "validated"
-            #Set up domainValueOptions param
-            parameters[3].enabled = False
-            domainValueOptions = []
-            testStr = ""
-            if parameters[2].value:
-                for fieldParam in parameters[2].value:
-                    if fieldParam[3]:
-                        domainName = fieldParam[1]
-                        if " -> " in domainName:
-                            domainName = domainName.split(" -> ")[1]
-                        relevantDomains[relevantDomainNamesUpper.index(domainName)]
-                        testStr += str(domainName) + " | "
-                # parameters[-1].value = testStr
-                parameters[3].value = domainValueOptions
-            else:
-                parameters[2].enabled = False
+                parameters[-1].value = "validated"
         else:
             parameters[1].enabled = False
-            parameters[2].enabled = False
-            parameters[3].enabled = False
         return
 
     def updateMessages(self, parameters):
@@ -1541,7 +1454,6 @@ class FixFieldMetadata(object):
         fcBase = parameters[0].valueAsText
         fc = arcpy.da.Describe(fcBase)['catalogPath']
         MDFieldDescriptions = parameters[1].value
-        MDDomianOptions = parameters[2].value
 
         
 
@@ -1549,22 +1461,6 @@ class FixFieldMetadata(object):
         gdb = getWorkspace(fc)
 
         fc_name = fc.split("\\")[-1]
-
-        msg('... ensuring domains were added to metadata...')
-
-        if MDDomianOptions:
-            valueDescriptions = {}
-            for domainOptions in MDDomianOptions:
-                fieldName = domainOptions[0].split(" ")[0]
-                if domainOptions[3]:
-                    valueDescriptions[fieldName] = "Use Separate Values"
-                elif domainOptions[4]:
-                    valueDescriptions[fieldName] = "Use List of Keys"
-                elif domainOptions[5]:
-                    valueDescriptions[fieldName] = "Use List of Keys/Values"
-
-            msg(valueDescriptions)
-            AddDomainsToMD(fc, valueDescriptions)
 
         msg('... Fixing field metadata formatting...')
         FixFieldMDCapitalization(fc)
