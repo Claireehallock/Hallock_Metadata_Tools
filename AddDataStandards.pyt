@@ -34,7 +34,7 @@ def getWorkspace(layer):
         workspace = catalogPath
     return workspace
 
-def AddMD(fc, template):
+def AddMDFromTemplate(fc, template):
     """Copy Metadata Fields to 'fc' from 'template'"""
     # get existing metadata from fc and template
     fc_md = arcpy.metadata.Metadata(fc)
@@ -119,11 +119,12 @@ def DeleteFieldsFromMD(fc, nameList):
             raise SystemExit
         msg([field.findtext("attrlabl") for field in tree.find("eainfo").find("detailed").findall("attr")])
         msg([field.findtext("attrlabl") for field in fieldMetaDataRoot.findall("attr")])
+        
         #Convert the tree back to XML and save
         fc_md.xml = ET.tostring(tree)
         fc_md.save()
     else:
-        msg("Error, not a valid list of fields to delete from metadata")
+        error("Not a valid list of fields to delete from metadata. Check DeleteFieldsFromMD")
         raise SystemExit
 
 def DeleteFieldFromMD(fc, name):
@@ -192,7 +193,7 @@ def FixFieldMDOrder(fc):
         fc_md.xml = treeBackup
     fc_md.save()
 
-def AddDomainValues(value, domainCodedValues, edomvdValue = None, edomvdsValue = None):
+def AddSeparateDomainValues(value, domainCodedValues, edomvdValue = None, edomvdsValue = None):
     """"""
     edom = ET.Element("edom")
 
@@ -274,7 +275,7 @@ def AddDomainsToMD(fc, valueDescriptions = None):
                     #Add the coded values
                     if (not valueDescriptions and [a.find("edom") for a in attr.findall("attrdomv")] is not None) or (valueDescriptions and fieldName in valueDescriptions.keys()): #only add new domain if specified in valueDescriptions or if domain does not already exist in metadata
                         #If using separate values
-                        if not valueDescriptions or valueDescriptions[fieldName] == "Use Separate Values": 
+                        if (not valueDescriptions and domainCodedValues) or valueDescriptions[fieldName] == "Use Separate Values": 
                             attrdomv = ET.Element("attrdomv")
                             MDattrdomvs = attr.findall("attrdomv")
                             MDedoms = [a.findall("edom") for a in MDattrdomvs if a is not None]
@@ -284,14 +285,14 @@ def AddDomainsToMD(fc, valueDescriptions = None):
                                 if value in valuesInMD.keys():
                                     edomvdValue = valuesInMD[value][0]
                                     edomvdsValue = valuesInMD[value][1]
-                                    attrdomv.append(AddDomainValues(value, domainCodedValues, edomvdValue, edomvdsValue))
+                                    attrdomv.append(AddSeparateDomainValues(value, domainCodedValues, edomvdValue, edomvdsValue))
                                     del valuesInMD[value]
                                     msg(value)
                                 else:
-                                    attrdomv.append(AddDomainValues(value, domainCodedValues))
+                                    attrdomv.append(AddSeparateDomainValues(value, domainCodedValues))
                             if valuesInMD:
                                 for value in valuesInMD.keys():
-                                    attrdomv.append(AddDomainValues(value, domainCodedValues, valuesInMD[value][0], valuesInMD[value][1]))
+                                    attrdomv.append(AddSeparateDomainValues(value, domainCodedValues, valuesInMD[value][0], valuesInMD[value][1]))
                                 warn("Extra metadata domain Values: " + str(valuesInMD)+ " in field " + str(fieldName))
                                 
                             #Delete other forms of domain metadata before adding new one
@@ -320,7 +321,7 @@ def AddDomainsToMD(fc, valueDescriptions = None):
                             attr.append(attrdomv)
                         
                         #If is range domain instead of coded values
-                        elif valueDescriptions[fieldName] == "Range":
+                        elif (not valueDescriptions and domainRange) or valueDescriptions[fieldName] == "Range":
                             msg(str(fieldName) + " (Range)")
                             attrdomv = ET.Element("attrdomv")
                             rdom = ET.Element("rdom")
@@ -593,14 +594,14 @@ class AddDataStandardsToExistingFC(object):
         default_region_code.value = "PWR"
 
         fieldInfo = arcpy.Parameter(
-                displayName = "Existing Fields - (By default existing field will be altered to match standards while preserving existing data)",
+                displayName = "Existing Fields to be Overwritten",
                 name = "Existing_Fields",
                 datatype = "GPString",
                 parameterType = "Optional",
                 direction = "Input",
                 multiValue=True
         )
-        fieldInfo.columns = [["GPString", "Existing Field Name", "READONLY"], ["GPBoolean", "Rename Existing Field and Create Non-Populated Field from Template?"], ["GPString", "Replacement Field Name"], ["GPString", "Replacement Field Alias"]]
+        fieldInfo.columns = [["GPString", "Existing Field Name", "READONLY"], ["GPBoolean", "Save field from being overwritten (Needs to be renamed)"], ["GPString", "New Field Name"], ["GPString", "New Field Alias"]]
         fieldInfo.enabled = False
         
         params = [fc, template, createBackup, default_unit_code, default_unit_name, default_group_code, default_group_name, default_region_code, fieldInfo, arcpy.Parameter(
@@ -920,7 +921,7 @@ class AddDataStandardsToExistingFC(object):
         #Add new metadata
         msg('... Adding field metadata ...')
 
-        AddMD(fc, template)
+        AddMDFromTemplate(fc, template)
 
         msg('... ensuring domains were added to metadata...')
 
@@ -1011,7 +1012,7 @@ class JustAddMetadata(object):
 
         msg('... Adding field metadata ...')
 
-        AddMD(fc, template)
+        AddMDFromTemplate(fc, template)
 
         msg('... Fixing field metadata formatting...')
         FixFieldMDCapitalization(fc)

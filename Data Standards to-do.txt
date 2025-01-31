@@ -16,6 +16,7 @@ Also add description adding part to quick fix
 Old tools dont automatucally separate domain list values
 fix range domains in rest of tools
 Check domains better within quick fix
+
 Fix Fields needs to check for incorrect Names
     MD description of fields that dont exist in the dataset
     For md with no fields, add checkbox to remove or not. Aslo include description
