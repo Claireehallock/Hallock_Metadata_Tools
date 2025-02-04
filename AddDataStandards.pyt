@@ -34,6 +34,51 @@ def getWorkspace(layer):
         workspace = catalogPath
     return workspace
 
+def addDefaultsToNewField(fc, fieldName, defaultValue):
+    """Performs arcpy.management.AssignDefaultToField and adds the default value to any rows that already existed in the attribute table"""
+    arcpy.management.AssignDefaultToField(fc, fieldName, defaultValue)
+
+    #Add values to table
+    with arcpy.da.UpdateCursor(fc, [fieldName]) as cursor:
+        for row in cursor:
+            # if not row[0]:
+            row[0] = defaultValue
+            cursor.updateRow(row)
+
+def ImportUnsyncedMetadata(Sourcefc, Destinationfc):
+    if arcpy.metadata.Metadata(Sourcefc):
+        SourceMD = arcpy.metadata.Metadata(Sourcefc)
+        DestinationMD = arcpy.metadata.Metadata(Destinationfc)
+        DestinationMD.xml = SourceMD.xml
+        DestinationMD.save()
+    else:
+        error("No Metadata Found in Source.")
+    return
+
+def CreateBackup(fc, suffix = "_original"):
+    gdb = getWorkspace(fc)
+    fc_name = fc.split("\\")[-1]
+
+    msg('... Making backup copy of original feature class ...')
+    backup_fc_name = str(fc_name) + str(suffix)
+    
+    # let user know backup copy already exists
+    if arcpy.Exists(f"{gdb}\{backup_fc_name}"):
+        msg(f" -- {backup_fc_name} already exists in {gdb} --")
+        msg(" -- not creating a backup --")
+
+    # create backup
+    else:
+        datatype = arcpy.da.Describe(fc)["dataElementType"]
+        if datatype == "DETable": arcpy.conversion.TableToTable(fc, gdb, backup_fc_name)
+        elif datatype == "DEFeatureClass": arcpy.conversion.FeatureClassToFeatureClass(fc, gdb, backup_fc_name)
+        else:
+            msg("Cannont create copy, file is of type " + str(datatype))
+            raise SystemExit
+        
+        #Make sure metadata doesn't get synced while creating a copy
+        ImportUnsyncedMetadata(fc, backup_fc_name)
+
 def AddMDFromTemplate(fc, template):
     """Copy Metadata Fields to 'fc' from 'template'"""
     # get existing metadata from fc and template
@@ -182,7 +227,7 @@ def FixFieldMDOrder(fc):
                 del fieldMetadataList[index]
                 del fieldMDNames[index]
             else:
-                warn("Error: " + str(field) + " does not have corresponding metadata")
+                warn(str(field) + " does not have corresponding metadata")
         if fieldMDNames: #If not all fields were added via parsing through 'fieldOrder', add them to the end of the list
             fieldMetaDataRoot.extend(fieldMetadataList)
             warn(str(fieldMDNames) + " were added to the end as they were not found within the fields list.") 
@@ -602,7 +647,7 @@ class AddDataStandardsToExistingFC(object):
                 direction = "Input",
                 multiValue=True
         )
-        fieldInfo.columns = [["GPString", "Existing Field Name", "READONLY"], ["GPBoolean", "Save field from being overwritten (Needs to be renamed)"], ["GPString", "New Field Name"], ["GPString", "New Field Alias"]]
+        fieldInfo.columns = [["GPString", "Existing Field Name", "READONLY"], ["GPBoolean", "Save field from being overwritten and create separate Data Standard Field (Existing Field needs to be renamed)"], ["GPString", "New Field Name"], ["GPString", "New Field Alias"]]
         fieldInfo.enabled = False
         
         params = [fc, template, createBackup, default_unit_code, default_unit_name, default_group_code, default_group_name, default_region_code, fieldInfo, arcpy.Parameter(
@@ -711,17 +756,18 @@ class AddDataStandardsToExistingFC(object):
                 ErrorMessage = ""
                 WarningMessage = ""
                 for row in parameters[8].value:
-                    oldField = oldFields[oldFieldNamesUpper.index(row[0].upper())]
-                    newField = newFields[newFieldNamesUpper.index(row[0].upper())]
-                    if oldField.type != newField.type:
-                        if row[1] == False:
-                            ErrorMessage += (str(row[0])+" does not match type ("+str(oldField.type)+" -> " +str(newField.type) + ")\n")
-                    if newField.length:
-                        if oldField.length:
-                            if oldField.length > newField.length:
+                    if not row[1]:
+                        oldField = oldFields[oldFieldNamesUpper.index(row[0].upper())]
+                        newField = newFields[newFieldNamesUpper.index(row[0].upper())]
+                        if oldField.type != newField.type:
+                            if row[1] == False:
+                                ErrorMessage += (str(row[0])+" does not match type ("+str(oldField.type)+" -> " +str(newField.type) + ")\n")
+                        if newField.length:
+                            if oldField.length:
+                                if oldField.length > newField.length:
+                                    WarningMessage += (str(row[0])+" length will be shortening, may cause issues: ("+str(oldField.length)+" -> " +str(newField.length) + ")\n")
+                            else:
                                 WarningMessage += (str(row[0])+" length will be shortening, may cause issues: ("+str(oldField.length)+" -> " +str(newField.length) + ")\n")
-                        else:
-                            WarningMessage += (str(row[0])+" length will be shortening, may cause issues: ("+str(oldField.length)+" -> " +str(newField.length) + ")\n")
                 if ErrorMessage:
                     parameters[8].setErrorMessage(ErrorMessage)
                 elif WarningMessage:
@@ -757,36 +803,19 @@ class AddDataStandardsToExistingFC(object):
 
         fc_name = fc.split("\\")[-1]
 
+        #Create backup if needed
         if create_backup:
-            msg('... Making backup copy of original feature class ...')
-            backup_fc_name = f"{fc_name}_original"
-            
-            # let user know backup copy already exists
-            if arcpy.Exists(f"{gdb}\{backup_fc_name}"):
-                msg(f" -- {backup_fc_name} already exists in {gdb} --")
-                msg(" -- not creating a backup --")
+            CreateBackup(fc)
 
-            # create backup
-            else:
-                datatype = arcpy.da.Describe(fc)["dataElementType"]
-                if datatype == "DETable": arcpy.conversion.TableToTable(fc, gdb, backup_fc_name)
-                elif datatype == "DEFeatureClass": arcpy.conversion.FeatureClassToFeatureClass(fc, gdb, backup_fc_name)
-                else:
-                    msg("Cannont create copy, file is of type " + str(datatype))
-                    raise SystemExit
-
-        #Rename fields as needed
+        #Rename fields as specified to prevent overrides
         if field_renamings:
             msg(f'... Rename data standard fields that already exist in {fc_name} ...')
 
             # compare fields, find similar
             FCfield_names = [f.name.upper() for f in arcpy.ListFields(fc)] 
             FCRealfield_names = [f.name for f in arcpy.ListFields(fc)] #Is this needed?
-            STfield_names = [f.name.upper() for f in arcpy.ListFields(template)]
-            # MatchField_Names = list(set(FCfield_names).intersection(set(STfield_names)))
-            matchedFields = [row[0] for row in field_renamings if row[0] != ""]
+
             msg('... Renaming existing fields...')
-            delFields = []
             for row in field_renamings:
                 field = row[0]
                 msg(row)
@@ -812,10 +841,8 @@ class AddDataStandardsToExistingFC(object):
                         else:
                             arcpy.AddError("No new name given for renamed fields")
                             raise SystemExit
-            fc_md = arcpy.metadata.Metadata(fc)
-            fc_md.synchronize()
 
-        #Override existing metadata
+        #Delete existing metadata specified to be overridden
         existingFields = [row[0] for row in field_renamings if not row[1]]
         fcFields = arcpy.ListFields(fc)
         tempFieldsUpper = [f.name.upper() for f in arcpy.ListFields(template)]
@@ -823,10 +850,9 @@ class AddDataStandardsToExistingFC(object):
         existingFields.extend([f.name.upper() for f in fcFields if f.type in removedFieldTypes and f.name.upper() in tempFieldsUpper]) #Override metadata for removed field types
         if len(existingFields) > 0:
             DeleteFieldsFromMD(fc, existingFields)
-
         
         # get domains in template gdb
-        template_gdb = '\\'.join(template.split('\\')[0:-1])
+        template_gdb = getWorkspace(template)
         template_doms = {dom.name: dom for dom in arcpy.da.ListDomains(template_gdb)}
 
         # adding fields!
@@ -834,99 +860,92 @@ class AddDataStandardsToExistingFC(object):
 
         # domains already in fc gdb
         doms = [dom.name for dom in arcpy.da.ListDomains(gdb)]
-        # with arcpy.da.Editor(gdb) as edit:
-        if True:
-            for fld in arcpy.ListFields(template):
+        for fld in arcpy.ListFields(template):
+            # don't add objectid or shape fields
+            if fld.type in removedFieldTypes: continue
 
-                # don't add objectid or shape fields
-                if fld.type in removedFieldTypes: continue
+            msg(f' - {fld.name}')
 
-                msg(f' - {fld.name}')
+            # handle domains
+            if fld.domain != '':
 
-                # handle domains
-                if fld.domain != '':
+                # if domain has not been added to gdb yet
+                if fld.domain not in doms:
+                    dom = template_doms[fld.domain]
 
-                    # if domain has not been added to gdb yet
-                    if fld.domain not in doms:
-                        dom = template_doms[fld.domain]
+                    # parse domain inputs
+                    domType = 'CODED' if dom.domainType == 'CodedValue' else 'Range'
+                    domSP = 'DUPLICATE'
+                    if dom.mergePolicy == 'AreaWeighted': domMP = 'AREA_WEIGHTED'
+                    elif dom.mergePolicy == 'SumValues': domMP = 'SUM_VALUES'
+                    else: domMP = "DEFAULT"
 
-                        # parse domain inputs
-                        domType = 'CODED' if dom.domainType == 'CodedValue' else 'Range'
+                    arcpy.management.CreateDomain(gdb,
+                                                dom.name,
+                                                dom.description,
+                                                dom.type,
+                                                domType,
+                                                domSP,
+                                                domMP)
+                    doms.append(fld.domain)
+                    msg(f'   - {dom.name} added to gdb')
 
-                        # if dom.splitPolicy == 'DefaultValue': domSP = 'DEFAULT'
-                        # elif dom.splitPolicy == 'Duplicate': domSP = 'DUPLICATE'
-                        # else: domSP = 'GEOMETRY'
-                        domSP = 'DUPLICATE'
+                    # add coded values
+                    if dom.domainType == 'CodedValue':
+                        for cv in dom.codedValues:
+                            arcpy.management.AddCodedValueToDomain(gdb,
+                                                                dom.name,
+                                                                cv,
+                                                                dom.codedValues[cv])
+                        msg(f'   - coded values added to {dom.name}')
 
-                        if dom.mergePolicy == 'AreaWeighted': domMP = 'AREA_WEIGHTED'
-                        elif dom.mergePolicy == 'SumValues': domMP = 'SUM_VALUES'
-                        else: domMP = "DEFAULT"
-
-                        arcpy.management.CreateDomain(gdb,
-                                                    dom.name,
-                                                    dom.description,
-                                                    dom.type,
-                                                    domType,
-                                                    domSP,
-                                                    domMP)
-                        doms.append(fld.domain)
-                        msg(f'   - {dom.name} added to gdb')
-
-                        # add coded values
-                        if dom.domainType == 'CodedValue':
-                            for cv in dom.codedValues:
-                                arcpy.management.AddCodedValueToDomain(gdb,
-                                                                    dom.name,
-                                                                    cv,
-                                                                    dom.codedValues[cv])
-                            msg(f'   - coded values added to {dom.name}')
-                if fld.name.upper() not in existingFields:
-                    # create the field
-                    arcpy.management.AddField(fc,
-                                            fld.name,
-                                            fld.type,
-                                            fld.precision,
-                                            fld.scale,
-                                            fld.length,
-                                            fld.aliasName,
-                                            '',
-                                            '',
-                                            fld.domain)
-                else:
-                    realFld = FCRealfield_names[FCfield_names.index(fld.name.upper())]
+            # create the field if it does not exist
+            if fld.name.upper() not in existingFields:
+                arcpy.management.AddField(fc,
+                                        fld.name,
+                                        fld.type,
+                                        fld.precision,
+                                        fld.scale,
+                                        fld.length,
+                                        fld.aliasName,
+                                        '',
+                                        '',
+                                        fld.domain)
+            else: #Or rename if properly if it does
+                realFld = FCRealfield_names[FCfield_names.index(fld.name.upper())]
+                try: 
+                    AlterField(fc, realFld, fld.name, fld.aliasName, fld.type, fld.length)#=======================================================================================================
+                except Exception as e:
+                    error("{4} {5}".format(fc, realFld, fld.name, fld.aliasName, fld.type, fld.length))
+                    error(str(e))
+                    error("Name cannot be set to "+str(fld.name))
+                if fld.domain:
                     try: 
-                        AlterField(fc, realFld, fld.name, fld.aliasName, fld.type, fld.length)#=======================================================================================================
-                    except Exception as e:
-                        error("{4} {5}".format(fc, realFld, fld.name, fld.aliasName, fld.type, fld.length))
-                        error(str(e))
-                        error("Name cannot be set to "+str(fld.name))
-                    if fld.domain:
-                        try: 
-                            arcpy.management.AssignDomainToField(fc, realFld, fld.domain)
-                        except:
-                            warn("Domain cannot be set to "+str(fld.domain))
-                            
+                        arcpy.management.AssignDomainToField(fc, realFld, fld.domain)
+                    except:
+                        warn("Domain cannot be set to "+str(fld.domain))
+                        
 
-                # add defaults if desired
-                if unit_code and fld.name == "UNITCODE":
-                    arcpy.management.AssignDefaultToField(fc, "UNITCODE", unit_code)
-                if unit_name and fld.name == "UNITNAME":
-                    arcpy.management.AssignDefaultToField(fc, "UNITNAME", unit_name)
-                if group_code and fld.name == "GROUPCODE":
-                    arcpy.management.AssignDefaultToField(fc, "GROUPCODE", group_code)
-                if group_name and fld.name == "GROUPNAME":
-                    arcpy.management.AssignDefaultToField(fc, "GROUPNAME", group_name)
-                if region_code and fld.name == "REGIONCODE":
-                    arcpy.management.AssignDefaultToField(fc, "REGIONCODE", region_code)
+            # add defaults if desired
+            if unit_code and fld.name == "UNITCODE":
+                addDefaultsToNewField(fc, "UNITCODE", unit_code)
+            if unit_name and fld.name == "UNITNAME":
+                addDefaultsToNewField(fc, "UNITNAME", unit_name)
+            if group_code and fld.name == "GROUPCODE":
+                addDefaultsToNewField(fc, "GROUPCODE", group_code)
+            if group_name and fld.name == "GROUPNAME":
+                addDefaultsToNewField(fc, "GROUPNAME", group_name)
+            if region_code and fld.name == "REGIONCODE":
+                addDefaultsToNewField(fc, "REGIONCODE", region_code)
 
         #Add new metadata
         msg('... Adding field metadata ...')
 
         AddMDFromTemplate(fc, template)
 
-        msg('... ensuring domains were added to metadata...')
+        # msg('... ensuring domains were added to metadata...')
 
-        AddDomainsToMD(fc)
+        # AddDomainsToMD(fc)
 
         msg('... Fixing field metadata formatting...')
         FixFieldMDCapitalization(fc)
@@ -939,7 +958,7 @@ class AddDataStandardsToExistingFC(object):
 class JustAddMetadata(object):
     def __init__(self):
         """This tool adds metadata for the data standards to the data standard metadata."""
-        self.label = "Add Field Metadata from CORE"
+        self.label = "Add CORE Metadata to Existing Fields"
         self.description = "This tool adds metadata to a feature class that already has Data Standard Fields but does not yet have the metadata to describe those fields."
         self.canRunInBackground = False
 
@@ -1544,17 +1563,9 @@ class ImportMetadata(object):
     def execute(self, parameters, messages):
         fcBase0 = parameters[0].valueAsText
         Sourcefc = arcpy.da.Describe(fcBase0)['catalogPath']
-        if arcpy.metadata.Metadata(Sourcefc):
-            fcBase1 = parameters[1].valueAsText
-            Destinationfc = arcpy.da.Describe(fcBase1)['catalogPath']
-
-            SourceMD = arcpy.metadata.Metadata(Sourcefc)
-            DestinationMD = arcpy.metadata.Metadata(Destinationfc)
-            DestinationMD.xml = SourceMD.xml
-            DestinationMD.save()
-        else:
-            error("No Metadata Found in Source")
-        return
+        fcBase1 = parameters[1].valueAsText
+        Destinationfc = arcpy.da.Describe(fcBase1)['catalogPath']
+        ImportUnsyncedMetadata(Sourcefc, Destinationfc)
 
 class TestingTool(object):
     def __init__(self):
@@ -1603,5 +1614,5 @@ class TestingTool(object):
 
     def execute(self, parameters, messages):
         fc = parameters[0].valueAsText
-        FixFieldMDOrder(fc)
+        addDefaultsToNewField(fc, "UNITCODE", "YOSE")
         return
