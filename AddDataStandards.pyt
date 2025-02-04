@@ -172,6 +172,7 @@ def FixFieldMDOrder(fc):
 
         #List of field names from the feature class/table
         fieldOrder = [f.name.upper() for f in arcpy.ListFields(fc)]
+        
         for field in fieldOrder:
             if field in fieldMDNames:
                 #Find the corresponding name from the metadata and add that value
@@ -181,10 +182,10 @@ def FixFieldMDOrder(fc):
                 del fieldMetadataList[index]
                 del fieldMDNames[index]
             else:
-                msg("Error: " + str(field) + " does not have corresponding metadata")
+                warn("Error: " + str(field) + " does not have corresponding metadata")
         if fieldMDNames: #If not all fields were added via parsing through 'fieldOrder', add them to the end of the list
             fieldMetaDataRoot.extend(fieldMetadataList)
-            msg(str(fieldMDNames) + " were added to the end as they were not found within the fields list.") 
+            warn(str(fieldMDNames) + " were added to the end as they were not found within the fields list.") 
         #Convert the tree back to XML and save
         fc_md.xml = ET.tostring(tree)
     except:
@@ -524,7 +525,7 @@ class Toolbox(object):
         self.alias = "Add Data Standards + Metadata"
 
         # List of tool classes associated with this toolbox
-        self.tools = [AddDataStandardsToExistingFC, JustAddMetadata, FixMetadataDomains, FixFieldMetadata, CheckMetadataQuality]#, TestingTool]
+        self.tools = [AddDataStandardsToExistingFC, JustAddMetadata, FixMetadataDomains, FixFieldMetadata, CheckMetadataQuality, ImportMetadata, TestingTool]
 
 class AddDataStandardsToExistingFC(object):
     def __init__(self):
@@ -1507,9 +1508,57 @@ class CheckMetadataQuality(object):
             error("No Metadata Found")
         return
 
+class ImportMetadata(object):
+    def __init__(self):
+        self.label = "Import Metadata"
+        self.description = ""
+        self.canRunInBackground = False
+
+    def getParameterInfo(self):
+        params = [
+            arcpy.Parameter(
+            displayName = "Source Metadata Layer",
+            name = "Source Feature Class",
+            datatype = "GPTableView",
+            parameterType = "Required",
+            direction = "Input"),
+
+            arcpy.Parameter(
+            displayName = "Destination Metadata Layer",
+            name = "Destination Feature Class",
+            datatype = "GPTableView",
+            parameterType = "Required",
+            direction = "Input")
+        ]
+        return params
+
+    def isLicensed(self):
+        return True
+
+    def updateParameters(self, parameters):
+        return
+
+    def updateMessages(self, parameters):
+        return
+
+    def execute(self, parameters, messages):
+        fcBase0 = parameters[0].valueAsText
+        Sourcefc = arcpy.da.Describe(fcBase0)['catalogPath']
+        if arcpy.metadata.Metadata(Sourcefc):
+            fcBase1 = parameters[1].valueAsText
+            Destinationfc = arcpy.da.Describe(fcBase1)['catalogPath']
+
+            SourceMD = arcpy.metadata.Metadata(Sourcefc)
+            DestinationMD = arcpy.metadata.Metadata(Destinationfc)
+            DestinationMD.xml = SourceMD.xml
+            DestinationMD.save()
+        else:
+            error("No Metadata Found in Source")
+        return
+
 class TestingTool(object):
     def __init__(self):
-        self.label = "Add Domains to MD"
+        self.label = "TEST"
         self.description = ""
         self.canRunInBackground = False
 
@@ -1554,5 +1603,5 @@ class TestingTool(object):
 
     def execute(self, parameters, messages):
         fc = parameters[0].valueAsText
-        AddDomainsToMD(fc)
+        FixFieldMDOrder(fc)
         return

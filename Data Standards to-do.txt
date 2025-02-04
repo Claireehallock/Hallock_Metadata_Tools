@@ -19,7 +19,7 @@ Check domains better within quick fix
 
 Fix Fields needs to check for incorrect Names
     MD description of fields that dont exist in the dataset
-    For md with no fields, add checkbox to remove or not. Aslo include description
+    For md with no fields, add checkbox to remove or not. Also include description
     for field with not md, also add checkbox to add or not
 For auto-populate alias in separate values, explain that it is the alias
 
