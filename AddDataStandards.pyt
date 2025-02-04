@@ -1015,10 +1015,6 @@ class JustAddMetadata(object):
         fcBase = parameters[0].valueAsText
         fc = arcpy.da.Describe(fcBase)['catalogPath']
         template = parameters[1].valueAsText
-        gdb = getWorkspace(fc)
-
-        fc_md = arcpy.metadata.Metadata(fc)
-        fc_md.synchronize()
 
         fcFields = arcpy.ListFields(fc)
         fcFieldsUpper = [f.name.upper() for f in arcpy.ListFields(fc)]
@@ -1033,6 +1029,161 @@ class JustAddMetadata(object):
         msg('... Adding field metadata ...')
 
         AddMDFromTemplate(fc, template)
+
+        msg('... Fixing field metadata formatting...')
+        FixFieldMDCapitalization(fc)
+        FixFieldMDOrder(fc)
+
+        msg('... Tool complete ...')
+        
+        return
+
+class FixFieldMetadata(object):
+    def __init__(self):
+        """This tool checks and fixes some common metadata errors."""
+        self.label = "Fix Fields Metadata"
+        self.description = "This tool checks and fixes some common metadata errors"
+        self.canRunInBackground = False
+
+    def getParameterInfo(self):
+        """Define parameter definitions"""
+
+        fc = arcpy.Parameter(
+                displayName = "Destination Feature Class",
+                name = "fc",
+                datatype = "GPTableView",
+                parameterType = "Required",
+                direction = "Input")
+        
+        fieldOptions = arcpy.Parameter(
+                displayName = "Metadata Field Options",
+                name = "FieldOptions",
+                datatype = "GPString",
+                parameterType = "Optional",
+                direction = "Input",
+                multiValue=True
+        )
+
+        fieldOptions.columns = [["GPString", "Field Name", "READONLY"], ["GPString", "New Description value"]]
+        fieldOptions.enabled = False
+
+        missingFields = arcpy.Parameter(
+                displayName = "Missing Fields",
+                name = "Missing Fields",
+                datatype = "GPString",
+                parameterType = "Optional",
+                direction = "Input",
+                multiValue=True
+        )
+        missingFields.columns = [["GPString", "Field Name", "READONLY"]]
+        missingFields.enabled = False
+        
+        params = [fc, fieldOptions, missingFields, arcpy.Parameter(
+                displayName = "Test String",
+                name = "String",
+                datatype = "GPString",
+                parameterType = "Optional",
+                direction = "Input")]
+        return params
+
+    def isLicensed(self):
+        """Set whether tool is licensed to execute."""
+        return True
+
+    def updateParameters(self, parameters):
+        """Modify the values and properties of parameters before internal
+        validation is performed.  This method is called whenever a parameter
+        has been changed."""
+
+        EmptyFieldParam = ["", ""]
+
+        if parameters[0].valueAsText:
+            fcBase = parameters[0].valueAsText
+            fc = arcpy.da.Describe(fcBase)['catalogPath']
+
+            fields = [field for field in arcpy.ListFields(fc)]
+
+            if not parameters[0].hasBeenValidated:
+                parameters[1].enabled = True
+
+                #Create var to store info  to be used in param updating
+                existingMetadataFieldInfo = {}
+
+                #Get existing infomation within metadata
+                fc_md = arcpy.metadata.Metadata(fc)
+                fc_tree = ET.fromstring(fc_md.xml)
+
+                eainfoTree = fc_tree.find("eainfo")
+                if eainfoTree is not None:
+                    treeDetailed = eainfoTree.find("detailed")
+                    if treeDetailed is not None:
+                        fieldMetadataList = treeDetailed.findall("attr") #Get the list of fields
+                        if fieldMetadataList:
+                            for attr in fieldMetadataList:
+                                fieldName = attr.findtext("attrlabl")
+                                existingMetadataFieldInfo[fieldName.upper()] = {"Description":"", "Source":"", "Domain":None}
+                                if fieldName:
+                                    #Add Description if exists
+                                    fieldDescription = attr.find("attrdef")
+                                    if fieldDescription is not None:
+                                        existingMetadataFieldInfo[fieldName.upper()]["Description"] = fieldDescription.text
+                                    #Add Source if exists
+                                    fieldSource = attr.find("attrdefs")
+                                    if fieldSource is not None:
+                                        existingMetadataFieldInfo[fieldName.upper()]["Source"] = fieldSource.text
+                
+
+                fieldOptions = []
+                missingFields = []
+                for field in fields:
+                    uName = field.name.upper()
+                    alias = field.aliasName
+                    fieldDesignation = field.name
+                    if alias != field.name:
+                        fieldDesignation = field.name + " (" + alias + ")"
+                    if uName in existingMetadataFieldInfo.keys():
+                        fieldMDInfo = existingMetadataFieldInfo[uName]
+                        fieldOptions.append([fieldDesignation, fieldMDInfo["Description"]])
+                    else:
+                        missingFields.append([fieldDesignation])
+
+                if fieldOptions:
+                    parameters[1].value = fieldOptions
+                    parameters[1].enabled = True
+                else:
+                    parameters[1].enabled = False
+
+                if missingFields:
+                    parameters[2].value = missingFields
+                    parameters[2].enabled = True
+                else:
+                    parameters[2].enabled = False
+
+                parameters[-1].value = "invalidated"
+            else:
+                parameters[-1].value = "validated"
+        else:
+            parameters[1].enabled = False
+        return
+
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter.  This method is called after internal validation."""
+
+        return
+
+    def execute(self, parameters, messages):
+        """The source code of the tool."""
+        fcBase = parameters[0].valueAsText
+        fc = arcpy.da.Describe(fcBase)['catalogPath']
+        MDFieldDescriptions = parameters[1].value
+
+        
+
+        # get the gdb where the fc lives
+        gdb = getWorkspace(fc)
+
+        fc_name = fc.split("\\")[-1]
 
         msg('... Fixing field metadata formatting...')
         FixFieldMDCapitalization(fc)
@@ -1327,161 +1478,6 @@ class FixMetadataDomains(object):
         if valueDescriptions:
             AddDomainsToMD(fc, valueDescriptions)
 
-
-        msg('... Fixing field metadata formatting...')
-        FixFieldMDCapitalization(fc)
-        FixFieldMDOrder(fc)
-
-        msg('... Tool complete ...')
-        
-        return
-
-class FixFieldMetadata(object):
-    def __init__(self):
-        """This tool checks and fixes some common metadata errors."""
-        self.label = "Fix Fields Metadata"
-        self.description = "This tool checks and fixes some common metadata errors"
-        self.canRunInBackground = False
-
-    def getParameterInfo(self):
-        """Define parameter definitions"""
-
-        fc = arcpy.Parameter(
-                displayName = "Destination Feature Class",
-                name = "fc",
-                datatype = "GPTableView",
-                parameterType = "Required",
-                direction = "Input")
-        
-        fieldOptions = arcpy.Parameter(
-                displayName = "Metadata Field Options",
-                name = "FieldOptions",
-                datatype = "GPString",
-                parameterType = "Optional",
-                direction = "Input",
-                multiValue=True
-        )
-
-        fieldOptions.columns = [["GPString", "Field Name", "READONLY"], ["GPString", "New Description value"]]
-        fieldOptions.enabled = False
-
-        missingFields = arcpy.Parameter(
-                displayName = "Missing Fields",
-                name = "Missing Fields",
-                datatype = "GPString",
-                parameterType = "Optional",
-                direction = "Input",
-                multiValue=True
-        )
-        missingFields.columns = [["GPString", "Field Name", "READONLY"]]
-        missingFields.enabled = False
-        
-        params = [fc, fieldOptions, missingFields, arcpy.Parameter(
-                displayName = "Test String",
-                name = "String",
-                datatype = "GPString",
-                parameterType = "Optional",
-                direction = "Input")]
-        return params
-
-    def isLicensed(self):
-        """Set whether tool is licensed to execute."""
-        return True
-
-    def updateParameters(self, parameters):
-        """Modify the values and properties of parameters before internal
-        validation is performed.  This method is called whenever a parameter
-        has been changed."""
-
-        EmptyFieldParam = ["", ""]
-
-        if parameters[0].valueAsText:
-            fcBase = parameters[0].valueAsText
-            fc = arcpy.da.Describe(fcBase)['catalogPath']
-
-            fields = [field for field in arcpy.ListFields(fc)]
-
-            if not parameters[0].hasBeenValidated:
-                parameters[1].enabled = True
-
-                #Create var to store info  to be used in param updating
-                existingMetadataFieldInfo = {}
-
-                #Get existing infomation within metadata
-                fc_md = arcpy.metadata.Metadata(fc)
-                fc_tree = ET.fromstring(fc_md.xml)
-
-                eainfoTree = fc_tree.find("eainfo")
-                if eainfoTree is not None:
-                    treeDetailed = eainfoTree.find("detailed")
-                    if treeDetailed is not None:
-                        fieldMetadataList = treeDetailed.findall("attr") #Get the list of fields
-                        if fieldMetadataList:
-                            for attr in fieldMetadataList:
-                                fieldName = attr.findtext("attrlabl")
-                                existingMetadataFieldInfo[fieldName.upper()] = {"Description":"", "Source":"", "Domain":None}
-                                if fieldName:
-                                    #Add Description if exists
-                                    fieldDescription = attr.find("attrdef")
-                                    if fieldDescription is not None:
-                                        existingMetadataFieldInfo[fieldName.upper()]["Description"] = fieldDescription.text
-                                    #Add Source if exists
-                                    fieldSource = attr.find("attrdefs")
-                                    if fieldSource is not None:
-                                        existingMetadataFieldInfo[fieldName.upper()]["Source"] = fieldSource.text
-                
-
-                fieldOptions = []
-                missingFields = []
-                for field in fields:
-                    uName = field.name.upper()
-                    alias = field.aliasName
-                    fieldDesignation = field.name
-                    if alias != field.name:
-                        fieldDesignation = field.name + " (" + alias + ")"
-                    if uName in existingMetadataFieldInfo.keys():
-                        fieldMDInfo = existingMetadataFieldInfo[uName]
-                        fieldOptions.append([fieldDesignation, fieldMDInfo["Description"]])
-                    else:
-                        missingFields.append([fieldDesignation])
-
-                if fieldOptions:
-                    parameters[1].value = fieldOptions
-                    parameters[1].enabled = True
-                else:
-                    parameters[1].enabled = False
-
-                if missingFields:
-                    parameters[2].value = missingFields
-                    parameters[2].enabled = True
-                else:
-                    parameters[2].enabled = False
-
-                parameters[-1].value = "invalidated"
-            else:
-                parameters[-1].value = "validated"
-        else:
-            parameters[1].enabled = False
-        return
-
-    def updateMessages(self, parameters):
-        """Modify the messages created by internal validation for each tool
-        parameter.  This method is called after internal validation."""
-
-        return
-
-    def execute(self, parameters, messages):
-        """The source code of the tool."""
-        fcBase = parameters[0].valueAsText
-        fc = arcpy.da.Describe(fcBase)['catalogPath']
-        MDFieldDescriptions = parameters[1].value
-
-        
-
-        # get the gdb where the fc lives
-        gdb = getWorkspace(fc)
-
-        fc_name = fc.split("\\")[-1]
 
         msg('... Fixing field metadata formatting...')
         FixFieldMDCapitalization(fc)
