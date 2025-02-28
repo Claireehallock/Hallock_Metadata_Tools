@@ -1038,7 +1038,13 @@ class JustAddMetadata(object):
         
         return
 
+MDFieldParamIndex = 1
+MDWithoutFieldParamIndex = 2
+MissingFieldsParamIndex = 3
+MissingFieldsListParamIndex = 4
+
 class FixFieldMetadata(object):
+    
     def __init__(self):
         """This tool checks and fixes some common metadata errors."""
         self.label = "Fix Fields Metadata"
@@ -1124,7 +1130,7 @@ class FixFieldMetadata(object):
             fields = [field for field in arcpy.ListFields(fc)]
 
             if not parameters[0].hasBeenValidated:
-                parameters[1].enabled = True
+                parameters[MDFieldParamIndex].enabled = True
 
                 #Create var to store info  to be used in param updating
                 existingMetadataFieldInfo = {}
@@ -1199,52 +1205,52 @@ class FixFieldMetadata(object):
 
                 #Add Field Desc Options parameter
                 if fieldOptions:
-                    parameters[1].value = fieldOptions
-                    parameters[1].enabled = True
+                    parameters[MDFieldParamIndex].value = fieldOptions
+                    parameters[MDFieldParamIndex].enabled = True
                 else:
-                    parameters[1].enabled = False
+                    parameters[MDFieldParamIndex].enabled = False
                 
                 #Add metadata without fields parameter
                 if uMDNames:
                     param2List = []
                     for MDName in uMDNames:
                         param2List.append([existingMetadataFieldInfo[MDName]["True Name"], existingMetadataFieldInfo[MDName]["Description"], " ", False])
-                    parameters[2].value = param2List
-                    parameters[2].enabled = True
+                    parameters[MDWithoutFieldParamIndex].value = param2List
+                    parameters[MDWithoutFieldParamIndex].enabled = True
                 else:
-                    parameters[2].enabled = False
+                    parameters[MDWithoutFieldParamIndex].enabled = False
                 
                 #Add Fields without metadata parameter
                 if missingFieldsList:
-                    parameters[3].value = missingFields
-                    parameters[4].value = missingFieldsList
-                    parameters[3].enabled = True
+                    parameters[MissingFieldsParamIndex].value = missingFields
+                    parameters[MissingFieldsListParamIndex].value = missingFieldsList
+                    parameters[MissingFieldsParamIndex].enabled = True
                     #Add the filter of potential renaming values to the "Metadata Without Fields"
                     missingFieldFilter = [item[0] for item in missingFieldsList]
-                    parameters[2].filters[2].list = [" "] + missingFieldFilter
+                    parameters[MDWithoutFieldParamIndex].filters[2].list = [" "] + missingFieldFilter
                 else:
-                    parameters[3].enabled = False
+                    parameters[MissingFieldsParamIndex].enabled = False
             
             #Remove "Fields without metadata" if they have metadata being renamed to that field
-            if parameters[2].value:
-                missingFieldsList = [item[0] for item in parameters[4].value]
-                for values in parameters[2].value:
+            if parameters[MDWithoutFieldParamIndex].value:
+                missingFieldsList = [item[0] for item in parameters[MissingFieldsListParamIndex].value]
+                for values in parameters[MDWithoutFieldParamIndex].value:
                     if values[2] != " ":
                         if values[2] in missingFieldsList:
                             missingFieldsList.remove(values[2])
-                existingMissingFieldParams = [item[0] for item in parameters[3].value]
+                existingMissingFieldParams = [item[0] for item in parameters[MissingFieldsParamIndex].value]
                 missingFieldParams = []
                 for fieldDesignation in missingFieldsList:
                     if fieldDesignation in existingMissingFieldParams:
-                        missingFieldParams.append(parameters[3].value[existingMissingFieldParams.index(fieldDesignation)]) #Get the existing parameter row so as to not override any parameter settings we dont need to
+                        missingFieldParams.append(parameters[MissingFieldsParamIndex].value[existingMissingFieldParams.index(fieldDesignation)]) #Get the existing parameter row so as to not override any parameter settings we dont need to
                     else:
                         missingFieldParams.append([fieldDesignation, False])
-                parameters[3].value = missingFieldParams
+                parameters[MissingFieldsParamIndex].value = missingFieldParams
 
         else:
-            parameters[1].enabled = False
-            parameters[2].enabled = False
-            parameters[3].enabled = False
+            parameters[MDFieldParamIndex].enabled = False
+            parameters[MDWithoutFieldParamIndex].enabled = False
+            parameters[MissingFieldsParamIndex].enabled = False
 
         return
 
@@ -1258,9 +1264,9 @@ class FixFieldMetadata(object):
         """The source code of the tool."""
         fcBase = parameters[0].valueAsText
         fc = arcpy.da.Describe(fcBase)['catalogPath']
-        MDFieldDescriptions = parameters[1].value
-
-        
+        MDFieldDescriptions = parameters[MDFieldParamIndex].value
+        MDWithoutFields = parameters[MDWithoutFieldParamIndex].value
+        MissingFields = parameters[MissingFieldsParamIndex].value
 
         # get the gdb where the fc lives
         gdb = getWorkspace(fc)
