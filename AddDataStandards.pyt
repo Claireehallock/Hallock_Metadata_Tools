@@ -176,6 +176,58 @@ def DeleteFieldFromMD(fc, name):
     """Delete the field in 'name' from the metadata in 'fc'"""
     DeleteFieldsFromMD(fc, [name])
 
+def DeleteDuplicateFieldsFromMD(fc, fieldName, duplicateNumberList):
+    """Delete duplicates of the field names "fieldName" from the fc. duplicateNumberList is a list that holds the integer representation of the index of each duplicate, where the first existing version of the field is numbered 0, and all subsequent versions (duplicates) are labelled 1,2,3,..."""
+    fc_md = arcpy.metadata.Metadata(fc)
+
+    tree = ET.fromstring(fc_md.xml)
+
+    fieldMetaDataRoot = tree.find("eainfo").find("detailed")
+    fieldMetadataList = fieldMetaDataRoot.findall("attr") #Get the list of fields
+    if fieldMetadataList:
+        duplicateCount = 0
+        deletedList = []
+        #Go through each field in MD To look for dupes of fieldName, then delete them if the index is found within duplicateNumberList
+        for attr in fieldMetadataList:
+            if attr.findtext("attrlabl").upper() == fieldName.upper():
+                if duplicateCount in duplicateNumberList:
+                    msg("Deleting old metadata for: "+str(attr.findtext("attrlabl")))
+                    fieldMetaDataRoot.remove(attr)
+                    deletedList.append(duplicateCount)
+                duplicateCount += 1
+        msg("Found " + str(duplicateCount - 1) + " duplicates of field '" + str(fieldName) +"'. Deleted duplicates numbered: "+ str(deletedList))
+        fc_md.xml = ET.tostring(tree)
+        fc_md.save()
+    else:
+        error('Error with how the program finds field metadata, fix the DeleteDuplicateFieldsFromMD function')
+
+def AddFieldToMD(fc, name):
+    """Add a Field name "name" to Metadata in "fc". No other information is added other than the field name."""
+    fc_md = arcpy.metadata.Metadata(fc)
+
+    tree = ET.fromstring(fc_md.xml)
+
+    #Check if the field already exists in the metadata and should not be added
+    fieldMetadataList = tree.find("eainfo").find("detailed").findall("attr")
+    if fieldMetadataList:
+        for attr in fieldMetadataList:
+            fieldName = attr.findtext("attrlabl")
+            if fieldName.upper() == name.upper():
+                warn("Tried to add field " + str(name) +" but it already existed")
+                return
+    
+    #Create the md field and add it to metadata
+    detailed = tree.find("eainfo").find("detailed")
+    attr = ET.Element("attr")
+    attrlabl = ET.Element("attrlabl")
+    attrlabl.text = name
+
+    attr.append(attrlabl)
+    detailed.append(attr)
+
+    fc_md.xml = ET.tostring(tree)
+    fc_md.save()
+
 def FixFieldMDCapitalization(fc):
     """Change the capitalization of the Metadata Field names in 'fc' to match the actual field names."""
     fc_md = arcpy.metadata.Metadata(fc)
@@ -237,6 +289,103 @@ def FixFieldMDOrder(fc):
         warn("Could not fix order of fields within metadata")
         #If something goes wrong, set the fields to the backup so no metadata actually gets deleted
         fc_md.xml = treeBackup
+    fc_md.save()
+
+def RenameFieldMetadata(fc, oldName, newName):
+    fc_md = arcpy.metadata.Metadata(fc)
+
+    tree = ET.fromstring(fc_md.xml)
+    fieldMetadataList = tree.find("eainfo").find("detailed").findall("attr") #Get the list of fields currently in metadata
+    if fieldMetadataList:
+        for attr in fieldMetadataList:
+            fieldName = attr.findtext("attrlabl")
+            if fieldName.upper() == oldName.upper():
+                attrlabl = attr.find("attrlabl")
+                attrlabl.text = newName
+                fc_md.xml = ET.tostring(tree)
+                fc_md.save()
+                return
+    else:
+        warn("No metadata found while using the RenameFieldMetadata function")
+    return
+
+def FixFieldMDDescsEtc(fc, fieldDescDict = {}):
+    """Update Field Metadata Descriptions in fc to match descriptions provided in fieldDescDict.
+    
+    Additionally, adds placeholders to other needed field metadata values such as Source"""
+    fc_md = arcpy.metadata.Metadata(fc)
+
+    tree = ET.fromstring(fc_md.xml)
+    fieldMetadataList = tree.find("eainfo").find("detailed").findall("attr") #Get the list of fields currently in metadata
+    if fieldMetadataList:
+        for attr in fieldMetadataList:
+            fieldName = attr.findtext("attrlabl")
+            if fieldName:
+                #Description
+                attrdef = attr.find("attrdef")
+                #Exists
+                if attrdef is not None:
+                    if fieldDescDict:#Add inputted value if needed
+                        if fieldName.upper() in fieldDescDict.keys():
+                            attrdef.text = fieldDescDict[fieldName.upper()]
+                            if not attrdef.text:
+                                attrdef.text = "-"
+                        else:
+                            warn("Tried to fix Description of '" + str(fieldName) +"' but couldn't find the description")
+                    else:
+                        #Doesn't have an existing value
+                        if not attrdef.text:
+                            attrdef.text = "-"
+                #Doesn't Yet Exist
+                else:
+                    attrdef = ET.Element("attrdef")
+                    if fieldDescDict:#Add inputted value if needed
+                        if fieldName.upper() in fieldDescDict.keys():
+                            attrdef.text = fieldDescDict[fieldName.upper()]
+                            if not attrdef.text:
+                                attrdef.text = "-"
+                        else:
+                            warn("Tried to add Description to '" + str(fieldName) +"' but couldn't find the description")
+                    else:
+                        attrdef.text = "-"
+                    attr.append(attrdef)
+
+                #Source
+                attrdefs = attr.find("attrdefs")
+                #Exists
+                if attrdefs is not None:
+                    #Doesn't have an existing value
+                    if not attrdefs.text:
+                        attrdefs.text = "-"
+                #Doesn't Yet Exist
+                else:
+                    attrdefs = ET.Element("attrdefs")
+                    attrdefs.text = "-"
+                    attr.append(attrdefs)
+
+                #Description of Values/Domain
+                attrdomv = attr.find("attrdomv")
+                if attrdomv is not None:
+                    udom = attrdomv.find("udom")
+                    if udom is not None and udom.text is None:
+                        #Exists
+                        if udom is not None:
+                            #Doesn't have an existing value
+                            if not udom.text:
+                                udom.text = "-"
+                        #Doesn't Yet Exist
+                        else:
+                            udom = ET.Element("udom")
+                            udom.text = "-"
+                            attrdomv.append(udom)
+                else: #Need to create attrdomv
+                    attrdomv = ET.Element("attrdomv")
+                    udom = ET.Element("udom")
+                    udom.text = "-"
+                    attrdomv.append(udom)
+                    attr.append(attrdomv)
+
+    fc_md.xml = ET.tostring(tree)
     fc_md.save()
 
 def AddSeparateDomainValues(value, domainCodedValues, edomvdValue = None, edomvdsValue = None):
@@ -492,6 +641,14 @@ def CheckMDQuality(fc):
         return
     # PrintXML(tree.find("dataIdInfo"))
     return
+
+def SynchronizeMetadata(fc):
+    """Run the synchronize function on the metadata found within fc"""
+    try:
+        fc_md = arcpy.metadata.Metadata(fc)
+        fc_md.synchronize()
+    except:
+        warn("Could not synchronize Metadata")
 
 def AlterField(fc, fieldName, newFieldName=None, newFieldAlias=None, newFieldType=None, newFieldlength=None, fieldIsNullable = None, clearFieldAlias = False):
     #Get the existing verison of the field in question
@@ -1085,14 +1242,14 @@ class FixFieldMetadata(object):
         spareMetadata.enabled = False
 
         missingFields = arcpy.Parameter(
-                displayName = "Missing Fields",
+                displayName = "Fields that will be added to Metadata",
                 name = "FieldswithoutMetadata",
                 datatype = "GPString",
                 parameterType = "Optional",
                 direction = "Input",
                 multiValue=True
         )
-        missingFields.columns = [["GPString", "Field Name", "READONLY"], ["GPBoolean", "Add Field to Metadata?"]]
+        missingFields.columns = [["GPString", "Field Name", "READONLY"], ["GPString", "Description (Optional)"]]
         missingFields.enabled = True
 
         missingFieldsList = arcpy.Parameter(
@@ -1200,7 +1357,7 @@ class FixFieldMetadata(object):
                         fieldOptions.append([fieldDesignation, fieldMDInfo["Description"]])
                         uMDNames.remove(uName)
                     else:
-                        missingFields.append([fieldDesignation, False])
+                        missingFields.append([fieldDesignation, ""])
                         missingFieldsList.append([fieldDesignation])
 
                 #Add Field Desc Options parameter
@@ -1244,7 +1401,7 @@ class FixFieldMetadata(object):
                     if fieldDesignation in existingMissingFieldParams:
                         missingFieldParams.append(parameters[MissingFieldsParamIndex].value[existingMissingFieldParams.index(fieldDesignation)]) #Get the existing parameter row so as to not override any parameter settings we dont need to
                     else:
-                        missingFieldParams.append([fieldDesignation, False])
+                        missingFieldParams.append([fieldDesignation, ""])
                 parameters[MissingFieldsParamIndex].value = missingFieldParams
 
         else:
@@ -1268,14 +1425,49 @@ class FixFieldMetadata(object):
         MDWithoutFields = parameters[MDWithoutFieldParamIndex].value
         MissingFields = parameters[MissingFieldsParamIndex].value
 
-        # get the gdb where the fc lives
-        gdb = getWorkspace(fc)
+        #Checking which fields to delete from metadata
+        msg('... Deleting fields marked for deletion...')
+        deleteList = {}
+        for row in MDWithoutFields:
+            if row[3] == True:
+                if "(Duplicate #" in row[0]:
+                    dupeNum = int(row[0].split("#")[-1][:-1])
+                    if row[0] not in deleteList.keys():
+                        deleteList[row[0]] = [dupeNum]
+                    else:
+                        deleteList[row[0]].append(dupeNum)
 
-        fc_name = fc.split("\\")[-1]
+                else:
+                    DeleteFieldFromMD(fc, row[0].split(" ")[0])
+
+            elif row[2] != " ":
+                RenameFieldMetadata(fc, row[0].split(" ")[0], row[2].split(" ")[0])
+        
+        if len(deleteList.keys()) > 0:
+            for key in list(deleteList.keys()):
+                DeleteDuplicateFieldsFromMD(fc, key.split(" ")[0], deleteList[key])
+
+
+        #Add field descriptions
+        fieldDescriptionDict = {}
+
+        for row in MDFieldDescriptions:
+            fieldDescriptionDict[row[0].split(" ")[0].upper()] = row[1]
+
+        msg('... Adding missing Fields...')
+        for row in MissingFields:
+            AddFieldToMD(fc, row[0].split(" ")[0].upper())
+            fieldDescriptionDict[row[0].split(" ")[0].upper()] = row[1]
+        
+        msg('... Fixing field metadata descriptions...')
+        FixFieldMDDescsEtc(fc, fieldDescriptionDict)
 
         msg('... Fixing field metadata formatting...')
         FixFieldMDCapitalization(fc)
         FixFieldMDOrder(fc)
+
+        msg('... Synchronizing Metadata...')
+        SynchronizeMetadata(fc)
 
         msg('... Tool complete ...')
         
@@ -1565,11 +1757,6 @@ class FixMetadataDomains(object):
         msg(valueDescriptions)
         if valueDescriptions:
             AddDomainsToMD(fc, valueDescriptions)
-
-
-        msg('... Fixing field metadata formatting...')
-        FixFieldMDCapitalization(fc)
-        FixFieldMDOrder(fc)
 
         msg('... Tool complete ...')
         
