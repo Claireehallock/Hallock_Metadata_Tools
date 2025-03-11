@@ -389,13 +389,16 @@ def FixFieldMDDescsEtc(fc, fieldDescDict = {}):
     fc_md.save()
 
 def AddSeparateDomainValues(value, domainCodedValues, edomvdValue = None, edomvdsValue = None):
-    """"""
+    """Within metadata, creates an individual "edom" to represent a specific 'value' in a domain. This value is then compared against the dict 'domainCodedValues' to see if there is a separate alias for the value.
+    
+    edomvdValue represents the description of that specific value within the domain, and edomvdsValue contains the source for that description"""
     edom = ET.Element("edom")
 
     edomv = ET.Element("edomv")
     edomv.text = value
     edom.append(edomv)
     
+    #If no specified description, check for an alias to use as the placeholder description
     edomvd = ET.Element("edomvd")
     if not edomvdValue:
         if domainCodedValues[value] != value:
@@ -576,7 +579,7 @@ def CheckFieldMDQuality(fc):
                     usedFields.append(uName)
                 else:
                     warn(""+str(fieldName) +" is not in the list of fields, possibly should be deleted")
-
+            #Check if Domain is in MD
             if uName in upperDomainFields:
                 realDomainName = fields[upperFields.index(uName)].domain
                 domainNameAttr = [(a) for a in attr.findall("attrdomv") if a.find("codesetd")]
@@ -613,8 +616,6 @@ def CheckFieldMDQuality(fc):
                                     else:
                                         warn(str(fieldName) + " Range Domain has missing min or max value")
                                 else:
-                                    # msg(domainValuesAttr)
-                                    # msg(fc_md.xml)
                                     PrintXML(domainValuesAttr)
                                     warn(str(fieldName) + "Domain Exists in metadata but is unpopulated")
                 else:
