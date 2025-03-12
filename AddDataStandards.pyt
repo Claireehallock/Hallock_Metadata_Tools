@@ -728,12 +728,12 @@ class Toolbox(object):
         self.alias = "Add Data Standards + Metadata"
 
         # List of tool classes associated with this toolbox
-        self.tools = [AddDataStandardsToExistingFC, JustAddMetadata, FixMetadataDomains, FixFieldMetadata, CheckMetadataQuality, ImportMetadata, TestingTool]
+        self.tools = [AddDataStandardsToExistingFC, JustAddMetadata, FixMetadataDomains, FixFieldMetadata, CheckMetadataQuality, ImportMetadata]#, TestingTool]
 
 class AddDataStandardsToExistingFC(object):
     def __init__(self):
         """This tool adds data standard fields to an existing feature class."""
-        self.label = "Add CORE Fields and their Metadata"
+        self.label = "Add STANDARD Fields and their Metadata"
         self.description = "This tool adds data standard fields to an existing feature class."
         self.canRunInBackground = False
 
@@ -808,12 +808,12 @@ class AddDataStandardsToExistingFC(object):
         fieldInfo.columns = [["GPString", "Existing Field Name", "READONLY"], ["GPBoolean", "Save field from being overwritten and create separate Data Standard Field (Existing Field needs to be renamed)"], ["GPString", "New Field Name"], ["GPString", "New Field Alias"]]
         fieldInfo.enabled = False
         
-        params = [fc, template, createBackup, default_unit_code, default_unit_name, default_group_code, default_group_name, default_region_code, fieldInfo, arcpy.Parameter(
-                displayName = "Test String",
-                name = "String",
-                datatype = "GPString",
-                parameterType = "Optional",
-                direction = "Input")]
+        params = [fc, template, createBackup, default_unit_code, default_unit_name, default_group_code, default_group_name, default_region_code, fieldInfo]#, arcpy.Parameter(
+                # displayName = "Test String",
+                # name = "String",
+                # datatype = "GPString",
+                # parameterType = "Optional",
+                # direction = "Input")]
         return params
 
     def isLicensed(self):
@@ -1116,7 +1116,7 @@ class AddDataStandardsToExistingFC(object):
 class JustAddMetadata(object):
     def __init__(self):
         """This tool adds metadata for the data standards to the data standard metadata."""
-        self.label = "Add CORE Metadata to Existing Fields"
+        self.label = "Add Metadata to Existing STANDARD Fields"
         self.description = "This tool adds metadata to a feature class that already has Data Standard Fields but does not yet have the metadata to describe those fields."
         self.canRunInBackground = False
 
@@ -1264,12 +1264,12 @@ class FixFieldMetadata(object):
         missingFieldsList.enabled = False
         missingFieldsList.columns = [["GPString", "Field Name", "READONLY"]]
         
-        params = [fc, fieldOptions, spareMetadata, missingFields, missingFieldsList, arcpy.Parameter(
-                displayName = "Test String",
-                name = "String",
-                datatype = "GPString",
-                parameterType = "Optional",
-                direction = "Input")]
+        params = [fc, fieldOptions, spareMetadata, missingFields, missingFieldsList]#, arcpy.Parameter(
+                # displayName = "Test String",
+                # name = "String",
+                # datatype = "GPString",
+                # parameterType = "Optional",
+                # direction = "Input")]
         return params
 
     def isLicensed(self):
@@ -1515,12 +1515,12 @@ class FixMetadataDomains(object):
         # domainValues.columns = [["GPString", "Domain that needs description", "READONLY"], ["GPString", "New Description value"]]
         # domainValues.enabled = False
         
-        params = [fc, domainOptions, rangeDomainOptions, arcpy.Parameter(
-                displayName = "Test String",
-                name = "String",
-                datatype = "GPString",
-                parameterType = "Optional",
-                direction = "Input")]
+        params = [fc, domainOptions, rangeDomainOptions]#, arcpy.Parameter(
+                # displayName = "Test String",
+                # name = "String",
+                # datatype = "GPString",
+                # parameterType = "Optional",
+                # direction = "Input")]
         return params
 
     def isLicensed(self):
