@@ -848,10 +848,10 @@ class AddDataStandardsToExistingFC(object):
                         parameters[paramRange[i]].filter.list = domainFilter
                         # testStr+=("("+str(paramRange[i])+": "+str(list(domainDict.keys()))+")")
                         # testStr += str(domainFilter)
-        if parameters[-1].value:
-            parameters[-1].value += testStr
-        else:
-            parameters[-1].value = testStr
+        # if parameters[-1].value:
+        #     parameters[-1].value += testStr
+        # else:
+        #     parameters[-1].value = testStr
 
     def updateParameters(self, parameters):
         """Modify the values and properties of parameters before internal
@@ -1694,9 +1694,10 @@ class FixMetadataDomains(object):
                     parameters[2].enabled = True
                 else:
                     parameters[2].enabled = False
-                parameters[-1].value = "invalidated"
+                # parameters[-1].value = "invalidated"
             else:
-                parameters[-1].value = "validated"
+                # parameters[-1].value = "validated"
+                pass
             #Set up domainValueOptions param
             # parameters[2].enabled = False
             # domainValueOptions = []
@@ -1771,6 +1772,7 @@ class CheckMetadataQuality(object):
         self.label = "Check Metadata Quality"
         self.description = ""
         self.canRunInBackground = False
+        self.category = "Helper Tools"
 
     def getParameterInfo(self):
         params = [arcpy.Parameter(
@@ -1806,6 +1808,7 @@ class ImportMetadata(object):
         self.label = "Import Metadata"
         self.description = ""
         self.canRunInBackground = False
+        self.category = "Helper Tools"
 
     def getParameterInfo(self):
         params = [
