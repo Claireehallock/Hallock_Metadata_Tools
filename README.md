@@ -1,11 +1,34 @@
-# DataStandardsWithMetadata
-Python Toolbox with tools to add data standard fields from a source dataset to a target dataset, along with metadata.
+# Hallock_MetadataTools
+Python Toolbox created for ArcGIS v3.3, should be compatible with later versions, may or may not be compatible with earlier versions.
 
-Process
-- attempts to renames fields in target if they share a name with source fields. Will break if an "[fldname]_old" already exists in target.
-- creates all fields from source within target except objectid and shape.
-- imports metadata related to fields from the source into the target.
+## Primary Tools
+### Add Metadata to Existing STANDARD Fields
+Adds data standard fields from a source (template) data standards dataset to a target dataset
+- If a field already exists with that name, you are given the option to either rename the field or have it be updated to match how the field is set up in the template
+- Does not override any data or metadata in fields found outside of the template
+### Add Metadata to Existing STANDARD Fields
+Transfers field metadata related to data standard fields from a source(template) dataset to a target dataset
+- Requires that all the template fields exist in the source 
+- Does not overriding existing metadata in other fields
 
-Notes
-- allows user to populate default values for the fields. The script will not field calculate the attribute, but future records will have default values.
-- before running this tool look at the target metadata and syncrhonize it. This will import a framework for the source metadata to land.
+### Fix Fields Metadata
+Increases quality and consistensy of field metadata
+- In metadata, will find fields missing metadata, fields with duplicate metadata, and fields within metadata that don't exist within the layer.
+- For fields that don't exist within the layer, the program gives the option of either renaming the field to match a field that doesn't have metadata, or deleting it.
+- Adds "-" as a placeholder value to sections of metadata that need to be filled in, but cannot be filled in by a computer, to add greater clarity in the metadata of what needs editing.
+
+### Fix Domains in Metadata
+Increases quality and consistensy of domain metadata
+- Checks for which domains do and do not exist in metadata
+- Gives options of whether to have "separate values", where each value in the domain has its own section in metadata and a description, or to have a "list", where the values are listed out in text format
+- The list can either be just the names of the values in the domain, or the values and their aliases.
+- If you choose separate values and there are not existing desciptions to draw from, the alias of the domain value will be used as the default description
+
+## Helper Tools
+### Import Metadata
+Copies metadata from one layer to another without synchronizing and altering it
+- There exists a built-in function called import metadata, but this one does not synchronize the metadata during that. Synchronizing the metadata will fix the layer name within the metadata, but if you are concerned about overriding metadata, synchronization has a chance to do that.
+### Check Metadata Quality
+Checks the general quality of metadata
+- Also checks for palceholders that should be filled in with permanent values.
+- Currently is not fully implemented, and primarily only checks field metadata
