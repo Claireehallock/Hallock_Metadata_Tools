@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+#Made by Claire Hallock in 2024-2025
+
 import arcpy
 import xml.etree.ElementTree as ET
 
