@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 #Made by Claire Hallock in 2024-2025
+#Last updated 3/13/2025
 
 import arcpy
 import xml.etree.ElementTree as ET
@@ -397,7 +398,7 @@ def AddSeparateDomainValues(value, domainCodedValues, edomvdValue = None, edomvd
     edom = ET.Element("edom")
 
     edomv = ET.Element("edomv")
-    edomv.text = value
+    edomv.text = str(value)
     edom.append(edomv)
     
     #If no specified description, check for an alias to use as the placeholder description
@@ -407,13 +408,13 @@ def AddSeparateDomainValues(value, domainCodedValues, edomvdValue = None, edomvd
             edomvdValue = domainCodedValues[value]
         else:
             edomvdValue = "-"
-    edomvd.text = edomvdValue
+    edomvd.text = str(edomvdValue)
     edom.append(edomvd)
 
     edomvds = ET.Element("edomvds")
     if not edomvdsValue:
         edomvdsValue = "-"
-    edomvds.text = edomvdsValue
+    edomvds.text = str(edomvdsValue)
     edom.append(edomvds)
     return edom
 
@@ -480,14 +481,15 @@ def AddDomainsToMD(fc, valueDescriptions = None):
                             MDattrdomvs = attr.findall("attrdomv")
                             MDedoms = [a.findall("edom") for a in MDattrdomvs if a is not None]
                             valuesInMD = {a.find("edomv").text.split(" (default)")[0]:[a.findtext("edomvd"), a.findtext("edomvds")] for aa in MDedoms for a in aa if aa is not None and a is not None}
-                            msg(valuesInMD)
+                            # msg(valuesInMD)
+                            msg("\t"+str(domainCodedValues))
                             for value in domainCodedValues.keys():
-                                if value in valuesInMD.keys():
-                                    edomvdValue = valuesInMD[value][0]
-                                    edomvdsValue = valuesInMD[value][1]
+                                if str(value) in valuesInMD.keys():
+                                    edomvdValue = valuesInMD[str(value)][0]
+                                    edomvdsValue = valuesInMD[str(value)][1]
                                     attrdomv.append(AddSeparateDomainValues(value, domainCodedValues, edomvdValue, edomvdsValue))
-                                    del valuesInMD[value]
-                                    msg(value)
+                                    del valuesInMD[str(value)]
+                                    msg("\t\t"+str(value))
                                 else:
                                     attrdomv.append(AddSeparateDomainValues(value, domainCodedValues))
                             if valuesInMD:
@@ -1752,13 +1754,13 @@ class FixMetadataDomains(object):
                 elif domainOptions[5]:
                     valueDescriptions[fieldName] = "Use List of Keys/Values"
 
-            msg(valueDescriptions)
+            # msg(valueDescriptions)
         
         if MDRangeDomainOptions:
             for rangeDomainOption in MDRangeDomainOptions:
                 fieldName = rangeDomainOption[0].split(" ")[0]
                 valueDescriptions[fieldName] = "Range"
-        msg(valueDescriptions)
+        # msg(valueDescriptions)
         if valueDescriptions:
             AddDomainsToMD(fc, valueDescriptions)
 
