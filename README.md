@@ -1,6 +1,9 @@
 # Hallock_MetadataTools
 Python Toolbox created for ArcGIS v3.3, should be compatible with later versions, may or may not be compatible with earlier versions.
 
+## Downloading
+To download, you can either download just the [Hallock_MetadataTools.pyt](https://github.com/Claireehallock/Hallock_Metadata_Tools/blob/main/Hallock_MetadataTools.pyt) file, or download the whole set of code and add that toolbox while inside ArcGIS Pro.
+
 ## Primary Tools
 ### Add STANDARD Fields and their Metadata
 Adds data standard fields from a source (template) data standards dataset to a target dataset
