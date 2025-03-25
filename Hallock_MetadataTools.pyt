@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 #Made by Claire Hallock in 2024-2025
-#Last updated 3/13/2025
+#Last updated 3/25/2025
 
 import arcpy
 import xml.etree.ElementTree as ET
@@ -754,7 +754,7 @@ class AddDataStandardsToExistingFC(object):
         template = arcpy.Parameter(
                 displayName = "Template Feature Class",
                 name = "template",
-                datatype = "DEFeatureClass",
+                datatype = "GPTableView",
                 parameterType = "Required",
                 direction = "Input")
 
@@ -1137,7 +1137,7 @@ class JustAddMetadata(object):
         template = arcpy.Parameter(
                 displayName = "Source Feature Class",
                 name = "template",
-                datatype = "DEFeatureClass",
+                datatype = "GPTableView",
                 parameterType = "Required",
                 direction = "Input")
         
