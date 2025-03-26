@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 #Made by Claire Hallock in 2024-2025
-#Last updated 3/25/2025
+#Last updated 3/26/2025
 
 import arcpy
 import xml.etree.ElementTree as ET
@@ -1433,20 +1433,21 @@ class FixFieldMetadata(object):
         #Checking which fields to delete from metadata
         msg('... Deleting fields marked for deletion...')
         deleteList = {}
-        for row in MDWithoutFields:
-            if row[3] == True:
-                if "(Duplicate #" in row[0]:
-                    dupeNum = int(row[0].split("#")[-1][:-1])
-                    if row[0] not in deleteList.keys():
-                        deleteList[row[0]] = [dupeNum]
+        if MDWithoutFields:
+            for row in MDWithoutFields:
+                if row[3] == True:
+                    if "(Duplicate #" in row[0]:
+                        dupeNum = int(row[0].split("#")[-1][:-1])
+                        if row[0] not in deleteList.keys():
+                            deleteList[row[0]] = [dupeNum]
+                        else:
+                            deleteList[row[0]].append(dupeNum)
+
                     else:
-                        deleteList[row[0]].append(dupeNum)
+                        DeleteFieldFromMD(fc, row[0].split(" ")[0])
 
-                else:
-                    DeleteFieldFromMD(fc, row[0].split(" ")[0])
-
-            elif row[2] != " ":
-                RenameFieldMetadata(fc, row[0].split(" ")[0], row[2].split(" ")[0])
+                elif row[2] != " ":
+                    RenameFieldMetadata(fc, row[0].split(" ")[0], row[2].split(" ")[0])
         
         if len(deleteList.keys()) > 0:
             for key in list(deleteList.keys()):
@@ -1454,15 +1455,16 @@ class FixFieldMetadata(object):
 
 
         #Add field descriptions
-        fieldDescriptionDict = {}
+        if MDFieldDescriptions:
+            fieldDescriptionDict = {}
+            for row in MDFieldDescriptions:
+                fieldDescriptionDict[row[0].split(" ")[0].upper()] = row[1]
 
-        for row in MDFieldDescriptions:
-            fieldDescriptionDict[row[0].split(" ")[0].upper()] = row[1]
-
-        msg('... Adding missing Fields...')
-        for row in MissingFields:
-            AddFieldToMD(fc, row[0].split(" ")[0].upper())
-            fieldDescriptionDict[row[0].split(" ")[0].upper()] = row[1]
+        if MissingFields:
+            msg('... Adding missing Fields...')
+            for row in MissingFields:
+                AddFieldToMD(fc, row[0].split(" ")[0].upper())
+                fieldDescriptionDict[row[0].split(" ")[0].upper()] = row[1]
         
         msg('... Fixing field metadata descriptions...')
         FixFieldMDDescsEtc(fc, fieldDescriptionDict)
