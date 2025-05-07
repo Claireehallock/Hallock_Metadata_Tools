@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 #Made by Claire Hallock in 2024-2025
-#Last updated 3/26/2025
+#Last updated 05/07/2025
 
 import arcpy
 import xml.etree.ElementTree as ET
@@ -103,7 +103,23 @@ def AddMDFromTemplate(fc, template):
     # insert template txt into original metadata
     fc_xml = fc_md.xml
     fc_tree = ET.fromstring(fc_xml)
+
     fc_tree.find("eainfo").find("detailed").extend(templateAttrs)
+    # If we need to add metadata to an xml that does not have field metadata, use the below method instead of the above line. 
+    # However, if the program is incorrectly reading the metadata this has the chance of overriding al metadata, so currently we will not implement this
+    #
+    # eainfo = fc_tree.find("eainfo")
+    # if eainfo is None:
+    #     eainfo = ET.Element("eainfo")
+    #     fc_tree.append(eainfo)
+    #     eainfo = fc_tree.find("eainfo")
+    # detailed = eainfo.find("detailed")
+    # if detailed is None:
+    #     detailed = ET.Element("detailed")
+    #     eainfo.append(detailed)
+    #     detailed = eainfo.find("detailed")
+        
+    # detailed.extend(templateAttrs)
 
     new_xml = ET.tostring(fc_tree)
 
@@ -969,7 +985,18 @@ class AddDataStandardsToExistingFC(object):
         if create_backup:
             CreateBackup(fc)
 
-        #Rename fields as specified to prevent overrides
+        #Check If there is already field metadata
+        fieldMetadataExisted = False
+        fc_md = arcpy.metadata.Metadata(fc)
+        if fc_md is not None:
+            tree = ET.fromstring(fc_md.xml)
+            eainfo = tree.find("eainfo")
+            if eainfo is not None:
+                detailed = eainfo.find("detailed")
+                if detailed is not None:
+                    fieldMetadataExisted = True
+
+        #Rename fields as specified to prevent metadata deletion
         if field_renamings:
             msg(f'... Rename data standard fields that already exist in {fc_name} ...')
 
@@ -977,10 +1004,10 @@ class AddDataStandardsToExistingFC(object):
             FCfield_names = [f.name.upper() for f in arcpy.ListFields(fc)] 
             FCRealfield_names = [f.name for f in arcpy.ListFields(fc)] #Is this needed?
 
-            msg('... Renaming existing fields...')
+            msg('... Renaming existing fields if needed...')
             for row in field_renamings:
                 field = row[0]
-                msg(row)
+                #msg(row)
                 if field:
                     realFld = FCRealfield_names[FCfield_names.index(field)]
                     if row[1]:
@@ -995,7 +1022,8 @@ class AddDataStandardsToExistingFC(object):
                             
                             try: 
                                 AlterField(fc, realFld, newName, newAlias)
-                                EditFieldMDName(fc, realFld, newName, newAlias)
+                                if fieldMetadataExisted:
+                                    EditFieldMDName(fc, realFld, newName, newAlias)
                             except Exception as e:
                                 error(str(e))
                                 error("Name cannot be set to "+str(newName)+". Ending Program")
@@ -1010,7 +1038,7 @@ class AddDataStandardsToExistingFC(object):
         tempFieldsUpper = [f.name.upper() for f in arcpy.ListFields(template)]
 
         existingFields.extend([f.name.upper() for f in fcFields if f.type in removedFieldTypes and f.name.upper() in tempFieldsUpper]) #Override metadata for removed field types
-        if len(existingFields) > 0:
+        if len(existingFields) > 0 and fieldMetadataExisted:
             DeleteFieldsFromMD(fc, existingFields)
         
         # get domains in template gdb
@@ -1894,6 +1922,11 @@ class TestingTool(object):
         return
 
     def execute(self, parameters, messages):
-        fc = parameters[0].valueAsText
-        addDefaultsToNewField(fc, "UNITCODE", "YOSE")
+        fcBase = parameters[0].valueAsText
+        fc = arcpy.da.Describe(fcBase)['catalogPath']
+        msg(fc)
+        #msg(arcpy.metadata.Metadata(fc).xml)
+        PrintXML(ET.fromstring(arcpy.metadata.Metadata(fc).xml))
+        #msg(fc.dataSource)
+        #addDefaultsToNewField(fc, "UNITCODE", "YOSE")
         return
