@@ -94,10 +94,8 @@ def AddMDFromTemplate(fc, template):
     try: 
         templateAttrs = ET.fromstring(template_xml).find("eainfo").find("detailed").findall("attr")
     except:
-        warn(' --- ERROR --- ')
-        warn(' metadata has likely not been synced ')
-        warn(' open the featureclass metadata, and in the metadata tab click the sync button')
-        warn(' then try running this tool again')
+        warn('Issue reading Template Matadata')
+
         raise SystemExit
 
     # insert template txt into original metadata
